@@ -33,7 +33,6 @@ vector<int> ReadVector() {
 	vector<int> v;
 	int size, n;
 	cin >> size;
-	//v.push_back(size); //надо ли включать размер в сам вектор?
 	for (int i = 0; i < size; ++i) {
 		cin >> n;
 		v.push_back(n);
@@ -65,12 +64,6 @@ struct Document {
 	int rating;
 };
 
-struct Query
-{
-	vector<string> plusWords;
-	vector<string> minusWords;
-};
-
 class SearchServer {
 public:
 	//Создание множества стоп-слов
@@ -92,14 +85,9 @@ public:
 				word_to_documents_freqs_[word].erase(document_id);
 			}
 			word_to_documents_freqs_[word].insert({ document_id, word_count / SplitIntoWordsNoStop(document).size() });
-			//cout << word << ' ' << document_id << ' ' << word_count / SplitIntoWordsNoStop(document).size() << endl;
-			int rating_count = rating.size();
-			int average_rating;
-			if (rating_count > 0) {
-				average_rating = accumulate(rating.begin(), rating.end(), 0) / rating_count;
-			}
-			else average_rating = 0;
-			documents_rating_.emplace(document_id, average_rating);
+			
+			
+			documents_rating_.emplace(document_id, ComputeAverageRating(rating));
 		}
 
 	}
@@ -127,6 +115,11 @@ private:
 	set<string> stop_words_;
 	map<int, int> documents_length_;
 	map<int, int> documents_rating_;
+
+	struct Query {
+		vector<string> plusWords;
+		vector<string> minusWords;
+	};
 
 	//Разбивка документа с исключением стоп-слов
 	vector<string> SplitIntoWordsNoStop(const string& text) const {
@@ -159,6 +152,9 @@ private:
 		for (auto [document_id, size] : documents_length_) {
 			cout << "Document " << document_id << " size: " << size << endl;
 		}
+		for (auto [document_id, rating] : documents_rating_) {
+			cout << "Document " << document_id << " rating: " << rating << endl;
+		}
 		for (auto [word, value] : word_to_documents_freqs_) {
 			cout << word << endl;
 			for (auto [doc, tf] : word_to_documents_freqs_.at(word)) {
@@ -168,16 +164,11 @@ private:
 		cout << "documents_length_.size = " << documents_length_.size() << endl;*/
 		//Обработка вектора плюс-слов
 		for (const string& word : query.plusWords) {
-			//cout << '{' << word << '}' << endl;
 			if (word_to_documents_freqs_.count(word) == 0) {
 				continue;
 			}
 			for (auto [document_id, TF] : word_to_documents_freqs_.at(word)) {
-				//cout << "doc {" << document_id << ' ' << documents_length_.size() << ' ' << word_to_documents_freqs_.at(word).size()  << '}' << endl;
-
 				double IDF = log(static_cast<double>(documents_length_.size()) / word_to_documents_freqs_.at(word).size());
-
-				//cout <<word << " : " << TF << " : " << word_to_documents_freqs_.at(word).size() << " : " << IDF << endl;
 				document_to_relevance[document_id] += TF * IDF;
 			}
 		}
@@ -199,6 +190,15 @@ private:
 		}
 
 		return matched_documents;
+	}
+	static int ComputeAverageRating(const vector<int>& rating) {
+		int rating_count = rating.size();
+		int average_rating;
+		if (rating_count > 0) {
+			average_rating = accumulate(rating.begin(), rating.end(), 0) / rating_count;
+		}
+		else average_rating = 0;
+		return average_rating;
 	}
 };
 
