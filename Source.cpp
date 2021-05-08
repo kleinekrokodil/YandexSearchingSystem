@@ -9,6 +9,7 @@
 #include <utility>
 #include <vector>
 #include <cmath>
+#include <numeric>
 
 
 using namespace std;
@@ -26,6 +27,18 @@ int ReadLineWithNumber() {
 	cin >> result;
 	ReadLine();
 	return result;
+}
+
+vector<int> ReadVector() {
+	vector<int> v;
+	int size, n;
+	cin >> size;
+	//v.push_back(size); //надо ли включать размер в сам вектор?
+	for (int i = 0; i < size; ++i) {
+		cin >> n;
+		v.push_back(n);
+	}
+	return v;
 }
 
 //Разбивка строки в вектор
@@ -49,6 +62,7 @@ vector<string> SplitIntoWords(const string& text) {
 struct Document {
 	int id;
 	double relevance;
+	int rating;
 };
 
 struct Query
@@ -67,7 +81,7 @@ public:
 	}
 
 	//Создание словаря слов запроса с параметром term frequency или TF
-	void AddDocument(int document_id, const string& document) {
+	void AddDocument(int document_id, const string& document, const vector<int> rating) {
 
 		documents_length_[document_id] = SplitIntoWordsNoStop(document).size();
 
@@ -79,6 +93,13 @@ public:
 			}
 			word_to_documents_freqs_[word].insert({ document_id, word_count / SplitIntoWordsNoStop(document).size() });
 			//cout << word << ' ' << document_id << ' ' << word_count / SplitIntoWordsNoStop(document).size() << endl;
+			int rating_count = rating.size();
+			int average_rating;
+			if (rating_count > 0) {
+				average_rating = accumulate(rating.begin(), rating.end(), 0) / rating_count;
+			}
+			else average_rating = 0;
+			documents_rating_.emplace(document_id, average_rating);
 		}
 
 	}
@@ -105,6 +126,7 @@ private:
 	map<string, map<int, double>> word_to_documents_freqs_; //словарь "Слово - Документ - TF"
 	set<string> stop_words_;
 	map<int, int> documents_length_;
+	map<int, int> documents_rating_;
 
 	//Разбивка документа с исключением стоп-слов
 	vector<string> SplitIntoWordsNoStop(const string& text) const {
@@ -173,7 +195,7 @@ private:
 		//Вектор результатов поискового запроса
 		vector<Document> matched_documents;
 		for (auto [document_id, relevance] : document_to_relevance) {
-			matched_documents.push_back({ document_id, relevance });
+			matched_documents.push_back({ document_id, relevance, documents_rating_.at(document_id) });
 		}
 
 		return matched_documents;
@@ -188,7 +210,8 @@ SearchServer CreateSearchServer() {
 	const int document_count = ReadLineWithNumber();
 
 	for (int document_id = 0; document_id < document_count; ++document_id) {
-		search_server.AddDocument(document_id, ReadLine());
+		search_server.AddDocument(document_id, ReadLine(), ReadVector());
+		cin.ignore();
 	}
 
 	return search_server;
@@ -199,7 +222,7 @@ int main() {
 	const SearchServer search_server = CreateSearchServer();
 
 	const string query = ReadLine();
-	for (auto [document_id, relevance] : search_server.FindTopDocuments(query)) {
-		cout << "{ document_id = " << document_id << ", relevance = " << relevance << " }" << endl;
+	for (auto [document_id, relevance, rating] : search_server.FindTopDocuments(query)) {
+		cout << "{ document_id = " << document_id << ", relevance = " << relevance << ", rating = " << rating << " }" << endl;
 	}
 }
