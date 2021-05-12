@@ -10,6 +10,7 @@
 #include <vector>
 #include <cmath>
 #include <numeric>
+#include <tuple>
 
 
 using namespace std;
@@ -80,6 +81,10 @@ public:
 		}
 	}
 
+	size_t GetDocumentCount() {
+		return documents_length_.size();
+	}
+
 	//Создание словаря слов запроса с параметром term frequency или TF
 	void AddDocument(int document_id, const string& document, DocumentStatus status, const vector<int> rating) {
 
@@ -126,6 +131,41 @@ public:
 		return matched_documents;
 	}
 
+	//Метод возврата списка совпавших слов запроса
+	tuple<vector<string>, DocumentStatus> MatchDocument(const string& raw_query, int document_id) const {
+		Query query = ParseQuery(raw_query);
+		set<string> BingoWords = {}; //Чтобы не сортировать и не проверять на совпадение
+		
+		//Обработка вектора плюс-слов
+		for (const string& word : query.plusWords) {
+			if (word_to_documents_freqs_.count(word) == 0) {
+				continue;
+			}
+			for (auto [document_, TF] : word_to_documents_freqs_.at(word)) {
+				//проверка совпадения по документу и запись слова в вектор
+				if (document_ == document_id) {
+					BingoWords.insert(word);
+				}
+			}
+		}
+		;
+
+		//Исключение документов с минус-словами
+		for (const string& word : query.minusWords) {
+			if (word_to_documents_freqs_.count(word) == 0) {
+				continue;
+			}
+			for (auto [document_, TF] : word_to_documents_freqs_.at(word)) {
+				//если совпадение по документу - очистка вектора
+				if (document_ == document_id) {
+					BingoWords.clear();
+				}
+			}
+		}
+		vector<string> v(BingoWords.begin(), BingoWords.end());
+		return tuple(v, documents_status_.at(document_id));
+	}
+
 private:
 	map<string, map<int, double>> word_to_documents_freqs_; //словарь "Слово - Документ - TF"
 	set<string> stop_words_;
@@ -166,20 +206,7 @@ private:
 	//Обработка поискового запроса
 	vector<Document> FindAllDocuments(const Query& query) const {
 		map<int, double> document_to_relevance;
-		/* Вывод текущих значений векторов для проверки
-		for (auto [document_id, size] : documents_length_) {
-			cout << "Document " << document_id << " size: " << size << endl;
-		}
-		for (auto [document_id, rating] : documents_rating_) {
-			cout << "Document " << document_id << " rating: " << rating << endl;
-		}
-		for (auto [word, value] : word_to_documents_freqs_) {
-			cout << word << endl;
-			for (auto [doc, tf] : word_to_documents_freqs_.at(word)) {
-				cout << '{' << doc << ", " << tf << '}' << endl;
-			}
-		}
-		cout << "documents_length_.size = " << documents_length_.size() << endl;*/
+		
 		//Обработка вектора плюс-слов
 		for (const string& word : query.plusWords) {
 			if (word_to_documents_freqs_.count(word) == 0) {
@@ -209,6 +236,8 @@ private:
 
 		return matched_documents;
 	}
+
+	//Метод подсчета среднего рейтинга документа
 	static int ComputeAverageRating(const vector<int>& rating) {
 		int rating_count = rating.size();
 		int average_rating;
@@ -218,6 +247,8 @@ private:
 		else average_rating = 0;
 		return average_rating;
 	}
+
+	
 };
 
 //Собственно поисковая функция
@@ -245,6 +276,18 @@ void PrintDocument(const Document& document) {
 		<< " }"s << endl;
 }
 
+//Печать документа и совпавших слов
+void PrintMatchDocumentResult(int document_id, const vector<string>& words, DocumentStatus status) {
+	cout << "{ "s
+		<< "document_id = "s << document_id << ", "s
+		<< "status = "s << static_cast<int>(status) << ", "s
+		<< "words ="s;
+	for (const string& word : words) {
+		cout << ' ' << word;
+	}
+	cout << "}"s << endl;
+}
+
 int main() {
 	SearchServer search_server;
 	search_server.SetStopWords("и в на"s);
@@ -254,15 +297,9 @@ int main() {
 	search_server.AddDocument(2, "ухоженный пёс выразительные глаза"s, DocumentStatus::ACTUAL, { 5, -12, 2, 1 });
 	search_server.AddDocument(3, "ухоженный скворец евгений"s, DocumentStatus::BANNED, { 9 });
 
-	cout << "ACTUAL:"s << endl;
-	for (const Document& document : search_server.FindTopDocuments("пушистый ухоженный кот"s, DocumentStatus::ACTUAL)) {
-		PrintDocument(document);
+	const int document_count = search_server.GetDocumentCount();
+	for (int document_id = 0; document_id < document_count; ++document_id) {
+		const auto [words, status] = search_server.MatchDocument("пушистый кот"s, document_id);
+		PrintMatchDocumentResult(document_id, words, status);
 	}
-
-	cout << "BANNED:"s << endl;
-	for (const Document& document : search_server.FindTopDocuments("пушистый ухоженный кот"s, DocumentStatus::BANNED)) {
-		PrintDocument(document);
-	}
-
-	return 0;
 }
