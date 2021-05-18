@@ -1,305 +1,308 @@
-/*Учебный проект поисковой системы
-* Создатель Кибирев В.Ю. */
-
 #include <algorithm>
+#include <cmath>
 #include <iostream>
 #include <map>
 #include <set>
 #include <string>
 #include <utility>
 #include <vector>
-#include <cmath>
-#include <numeric>
-#include <tuple>
-
 
 using namespace std;
 
-const int MAX_RESULT_DOCUMENT_COUNT = 5; //Максимальное число выводимых результатов
+
+const int MAX_RESULT_DOCUMENT_COUNT = 5;
 
 string ReadLine() {
-	string s;
-	getline(cin, s);
-	return s;
+    string s;
+    getline(cin, s);
+    return s;
 }
 
 int ReadLineWithNumber() {
-	int result;
-	cin >> result;
-	ReadLine();
-	return result;
+    int result;
+    cin >> result;
+    ReadLine();
+    return result;
 }
 
-vector<int> ReadVector() {
-	vector<int> v;
-	int size, n;
-	cin >> size;
-	for (int i = 0; i < size; ++i) {
-		cin >> n;
-		v.push_back(n);
-	}
-	return v;
-}
-
-//Разбивка строки в вектор
 vector<string> SplitIntoWords(const string& text) {
-	vector<string> words;
-	string word;
-	for (const char c : text) {
-		if (c == ' ') {
-			words.push_back(word);
-			word = "";
-		}
-		else {
-			word += c;
-		}
-	}
-	words.push_back(word);
+    vector<string> words;
+    string word;
+    for (const char c : text) {
+        if (c == ' ') {
+            words.push_back(word);
+            word = "";
+        }
+        else {
+            word += c;
+        }
+    }
+    words.push_back(word);
 
-	return words;
+    return words;
 }
-
-enum class DocumentStatus {
-	ACTUAL,
-	IRRELEVANT,
-	BANNED,
-	REMOVED
-};
 
 struct Document {
-	int id;
-	double relevance;
-	int rating;
+    int id;
+    double relevance;
+    int rating;
+};
+
+enum class DocumentStatus {
+    ACTUAL,
+    IRRELEVANT,
+    BANNED,
+    REMOVED,
+};
+
+auto key_mapper = [](const Document& document) {
+    return document.id;
 };
 
 class SearchServer {
 public:
-	//Создание множества стоп-слов
-	void SetStopWords(const string& text) {
-		for (const string& word : SplitIntoWords(text)) {
-			stop_words_.insert(word);
-		}
-	}
+    void SetStopWords(const string& text) {
+        for (const string& word : SplitIntoWords(text)) {
+            stop_words_.insert(word);
+        }
+    }
+    size_t GetDocumentCount() {
+        return documents_.size();
+    }
 
-	size_t GetDocumentCount() {
-		return documents_length_.size();
-	}
+    void AddDocument(int document_id, const string& document, DocumentStatus status, const vector<int>& ratings) {
+        const vector<string> words = SplitIntoWordsNoStop(document);
+        const double inv_word_count = 1.0 / words.size();
+        for (const string& word : words) {
+            word_to_document_freqs_[word][document_id] += inv_word_count;
+        }
+        documents_.emplace(document_id,
+            DocumentData{
+                ComputeAverageRating(ratings),
+                status
+            });
+    }
 
-	//Создание словаря слов запроса с параметром term frequency или TF
-	void AddDocument(int document_id, const string& document, DocumentStatus status, const vector<int> rating) {
+    //Создание вектора наиболее релевантных документов для вывода
+    template <typename KeyMapper>
+    vector<Document> FindTopDocuments(const string& query, KeyMapper key_mapper) const {
+        Query structuredQuery = ParseQuery(query);
+        auto matched_documents = FindAllDocuments(structuredQuery, key_mapper);
+       
+        //Сортировка по убыванию релевантности / возрастанию рейтинга
+        sort(matched_documents.begin(), matched_documents.end(),
+            [](const Document& lhs, const Document& rhs) {
+                if (abs(lhs.relevance - rhs.relevance) < 1e-6) {
+                    return lhs.rating > rhs.rating;
+                }
+                else {
+                    return lhs.relevance > rhs.relevance;
+                }
+            });
 
-		documents_length_[document_id] = SplitIntoWordsNoStop(document).size();
 
-		for (const string& word : SplitIntoWordsNoStop(document)) {
-			double word_count = 1.0;
-			if (word_to_documents_freqs_[word].count(document_id)) {
-				++word_count;
-				word_to_documents_freqs_[word].erase(document_id);
-			}
-			word_to_documents_freqs_[word].insert({ document_id, word_count / SplitIntoWordsNoStop(document).size() });
-			
-			
-			documents_rating_.emplace(document_id, ComputeAverageRating(rating));
-			documents_status_.emplace(document_id, status);
-		}
 
-	}
+        if (matched_documents.size() > MAX_RESULT_DOCUMENT_COUNT) {
+            matched_documents.resize(MAX_RESULT_DOCUMENT_COUNT);
+        }
+        return matched_documents;
+    }
 
-	//Создание вектора наиболее релевантных документов для вывода
-	vector<Document> FindTopDocuments(const string& query, DocumentStatus status) const {
-		Query structuredQuery = ParseQuery(query);
-		auto matched_documents = FindAllDocuments(structuredQuery);
+    vector<Document> FindTopDocuments(const string& query) const {
+        return FindTopDocuments(query, [](int document_id, DocumentStatus status, int rating) { return status == DocumentStatus::ACTUAL; });
+    }
+    //Метод возврата списка совпавших слов запроса
+    tuple<vector<string>, DocumentStatus> MatchDocument(const string& raw_query, int document_id) const {
+        Query query = ParseQuery(raw_query);
+        set<string> BingoWords = {}; //Чтобы не сортировать и не проверять на совпадение
 
-		sort(
-			matched_documents.begin(),
-			matched_documents.end(),
-			[](const Document& lhs, const Document& rhs) {
-				return lhs.relevance > rhs.relevance;
-			}
-		);
-		for (size_t i = 0; i < matched_documents.size();) {
-			int id = matched_documents.at(i).id;
-			if (documents_status_.at(id) != status) {
-				matched_documents.erase(matched_documents.begin() + i);
-			}
-			else ++i;
-		}
+        //Обработка вектора плюс-слов
+        for (const string& word : query.plus_words) {
+            if (word_to_document_freqs_.count(word) == 0) {
+                continue;
+            }
+            for (auto [document_, TF] : word_to_document_freqs_.at(word)) {
+                //проверка совпадения по документу и запись слова в вектор
+                if (document_ == document_id) {
+                    BingoWords.insert(word);
+                }
+            }
+        }
+        ;
 
-		if (matched_documents.size() > MAX_RESULT_DOCUMENT_COUNT) {
-			matched_documents.resize(MAX_RESULT_DOCUMENT_COUNT);
-		}
-		return matched_documents;
-	}
-
-	//Метод возврата списка совпавших слов запроса
-	tuple<vector<string>, DocumentStatus> MatchDocument(const string& raw_query, int document_id) const {
-		Query query = ParseQuery(raw_query);
-		set<string> BingoWords = {}; //Чтобы не сортировать и не проверять на совпадение
-		
-		//Обработка вектора плюс-слов
-		for (const string& word : query.plusWords) {
-			if (word_to_documents_freqs_.count(word) == 0) {
-				continue;
-			}
-			for (auto [document_, TF] : word_to_documents_freqs_.at(word)) {
-				//проверка совпадения по документу и запись слова в вектор
-				if (document_ == document_id) {
-					BingoWords.insert(word);
-				}
-			}
-		}
-		;
-
-		//Исключение документов с минус-словами
-		for (const string& word : query.minusWords) {
-			if (word_to_documents_freqs_.count(word) == 0) {
-				continue;
-			}
-			for (auto [document_, TF] : word_to_documents_freqs_.at(word)) {
-				//если совпадение по документу - очистка вектора
-				if (document_ == document_id) {
-					BingoWords.clear();
-				}
-			}
-		}
-		vector<string> v(BingoWords.begin(), BingoWords.end());
-		return tuple(v, documents_status_.at(document_id));
-	}
+        //Исключение документов с минус-словами
+        for (const string& word : query.minus_words) {
+            if (word_to_document_freqs_.count(word) == 0) {
+                continue;
+            }
+            for (auto [document_, TF] : word_to_document_freqs_.at(word)) {
+                //если совпадение по документу - очистка вектора
+                if (document_ == document_id) {
+                    BingoWords.clear();
+                }
+            }
+        }
+        vector<string> v(BingoWords.begin(), BingoWords.end());
+        return tuple(v, documents_.at(document_id).status);
+    }
 
 private:
-	map<string, map<int, double>> word_to_documents_freqs_; //словарь "Слово - Документ - TF"
-	set<string> stop_words_;
-	map<int, int> documents_length_;
-	map<int, int> documents_rating_;
-	map<int, DocumentStatus> documents_status_;
+    struct DocumentData {
+        int rating;
+        DocumentStatus status;
+    };
 
-	struct Query {
-		vector<string> plusWords;
-		vector<string> minusWords;
-	};
+    set<string> stop_words_;
+    map<string, map<int, double>> word_to_document_freqs_;
+    map<int, DocumentData> documents_;
 
+    bool IsStopWord(const string& word) const {
+        return stop_words_.count(word) > 0;
+    }
 
-	//Разбивка документа с исключением стоп-слов
-	vector<string> SplitIntoWordsNoStop(const string& text) const {
-		vector<string> words;
-		for (const string& word : SplitIntoWords(text)) {
-			if (stop_words_.count(word) == 0) {
-				words.push_back(word);
-			}
-		}
-		return words;
-	}
+    vector<string> SplitIntoWordsNoStop(const string& text) const {
+        vector<string> words;
+        for (const string& word : SplitIntoWords(text)) {
+            if (!IsStopWord(word)) {
+                words.push_back(word);
+            }
+        }
+        return words;
+    }
 
-	//Создание структуры плюс-минус слов
-	Query ParseQuery(const string& query) const {
-		const vector<string> query_words = SplitIntoWordsNoStop(query);
-		Query structuredQuery;
-		for (const string& word : query_words) {
-			if (word[0] == '-') {
-				structuredQuery.minusWords.push_back(word.substr(1));
-			}
-			else structuredQuery.plusWords.push_back(word);
-		}
-		return structuredQuery;
-	}
+    static int ComputeAverageRating(const vector<int>& ratings) {
+        if (ratings.empty()) {
+            return 0;
+        }
+        int rating_sum = 0;
+        for (const int rating : ratings) {
+            rating_sum += rating;
+        }
+        return rating_sum / static_cast<int>(ratings.size());
+    }
 
-	//Обработка поискового запроса
-	vector<Document> FindAllDocuments(const Query& query) const {
-		map<int, double> document_to_relevance;
-		
-		//Обработка вектора плюс-слов
-		for (const string& word : query.plusWords) {
-			if (word_to_documents_freqs_.count(word) == 0) {
-				continue;
-			}
-			for (auto [document_id, TF] : word_to_documents_freqs_.at(word)) {
-				double IDF = log(static_cast<double>(documents_length_.size()) / word_to_documents_freqs_.at(word).size());
-				document_to_relevance[document_id] += TF * IDF;
-			}
-		}
+    struct QueryWord {
+        string data;
+        bool is_minus;
+        bool is_stop;
+    };
 
-		//Исключение документов с минус-словами
-		for (const string& word : query.minusWords) {
-			if (word_to_documents_freqs_.count(word) == 0) {
-				continue;
-			}
-			for (auto [document_id, TF] : word_to_documents_freqs_.at(word)) {
-				document_to_relevance.erase(document_id);
-			}
-		}
+    QueryWord ParseQueryWord(string text) const {
+        bool is_minus = false;
+        // Word shouldn't be empty
+        if (text[0] == '-') {
+            is_minus = true;
+            text = text.substr(1);
+        }
+        return {
+            text,
+            is_minus,
+            IsStopWord(text)
+        };
+    }
 
-		//Вектор результатов поискового запроса
-		vector<Document> matched_documents;
-		for (auto [document_id, relevance] : document_to_relevance) {
-			matched_documents.push_back({ document_id, relevance, documents_rating_.at(document_id) });
-		}
+    struct Query {
+        set<string> plus_words;
+        set<string> minus_words;
+    };
 
-		return matched_documents;
-	}
+    Query ParseQuery(const string& text) const {
+        Query query;
+        for (const string& word : SplitIntoWords(text)) {
+            const QueryWord query_word = ParseQueryWord(word);
+            if (!query_word.is_stop) {
+                if (query_word.is_minus) {
+                    query.minus_words.insert(query_word.data);
+                }
+                else {
+                    query.plus_words.insert(query_word.data);
+                }
+            }
+        }
+        return query;
+    }
 
-	//Метод подсчета среднего рейтинга документа
-	static int ComputeAverageRating(const vector<int>& rating) {
-		int rating_count = rating.size();
-		int average_rating;
-		if (rating_count > 0) {
-			average_rating = accumulate(rating.begin(), rating.end(), 0) / rating_count;
-		}
-		else average_rating = 0;
-		return average_rating;
-	}
+    // Existence required
+    double ComputeWordInverseDocumentFreq(const string& word) const {
+        return log(documents_.size() * 1.0 / word_to_document_freqs_.at(word).size());
+    }
+    
+    template <typename KeyMapper>
+    vector<Document> FindAllDocuments(const Query& query, KeyMapper key_mapper) const {
+        map<int, double> document_to_relevance;
+        for (const string& word : query.plus_words) {
+            if (word_to_document_freqs_.count(word) == 0) {
+                continue;
+            }
+            const double inverse_document_freq = ComputeWordInverseDocumentFreq(word);
+            for (const auto [document_id, term_freq] : word_to_document_freqs_.at(word)) {
+                if (key_mapper(documents_.find(document_id)->first, documents_.at(document_id).status, documents_.at(document_id).rating)) {
+                    document_to_relevance[document_id] += term_freq * inverse_document_freq;
+                }
+            }
+        }
 
-	
+        for (const string& word : query.minus_words) {
+            if (word_to_document_freqs_.count(word) == 0) {
+                continue;
+            }
+            for (const auto [document_id, term_freq] : word_to_document_freqs_.at(word)) {
+                document_to_relevance.erase(document_id);
+            }
+        }
+
+        vector<Document> matched_documents;
+        for (const auto [document_id, relevance] : document_to_relevance) {
+            matched_documents.push_back({
+                document_id,
+                relevance,
+                documents_.at(document_id).rating
+                });
+        }
+        return matched_documents;
+    }
 };
-
-//Собственно поисковая функция
-SearchServer CreateSearchServer() {
-	SearchServer search_server;
-	search_server.SetStopWords(ReadLine());
-
-	const int document_count = ReadLineWithNumber();
-	DocumentStatus status = DocumentStatus::ACTUAL;
-
-	for (int document_id = 0; document_id < document_count; ++document_id) {
-		search_server.AddDocument(document_id, ReadLine(), status, ReadVector());
-		//cin.ignore();
-	}
-
-	return search_server;
-}
-
-//Печать документа
-void PrintDocument(const Document& document) {
-	cout << "{ "s
-		<< "document_id = "s << document.id << ", "s
-		<< "relevance = "s << document.relevance << ", "s
-		<< "rating = "s << document.rating
-		<< " }"s << endl;
-}
-
-//Печать документа и совпавших слов
 void PrintMatchDocumentResult(int document_id, const vector<string>& words, DocumentStatus status) {
-	cout << "{ "s
-		<< "document_id = "s << document_id << ", "s
-		<< "status = "s << static_cast<int>(status) << ", "s
-		<< "words ="s;
-	for (const string& word : words) {
-		cout << ' ' << word;
-	}
-	cout << "}"s << endl;
+    cout << "{ "s
+        << "document_id = "s << document_id << ", "s
+        << "status = "s << static_cast<int>(status) << ", "s
+        << "words ="s;
+    for (const string& word : words) {
+        cout << ' ' << word;
+    }
+    cout << "}"s << endl;
+}
+void PrintDocument(const Document& document) {
+    cout << "{ "s
+        << "document_id = "s << document.id << ", "s
+        << "relevance = "s << document.relevance << ", "s
+        << "rating = "s << document.rating
+        << " }"s << endl;
 }
 
 int main() {
-	SearchServer search_server;
-	search_server.SetStopWords("и в на"s);
+    SearchServer search_server;
+    search_server.SetStopWords("и в на"s);
 
-	search_server.AddDocument(0, "белый кот и модный ошейник"s, DocumentStatus::ACTUAL, { 8, -3 });
-	search_server.AddDocument(1, "пушистый кот пушистый хвост"s, DocumentStatus::ACTUAL, { 7, 2, 7 });
-	search_server.AddDocument(2, "ухоженный пёс выразительные глаза"s, DocumentStatus::ACTUAL, { 5, -12, 2, 1 });
-	search_server.AddDocument(3, "ухоженный скворец евгений"s, DocumentStatus::BANNED, { 9 });
+    search_server.AddDocument(0, "белый кот и модный ошейник"s, DocumentStatus::ACTUAL, { 8, -3 });
+    search_server.AddDocument(1, "пушистый кот пушистый хвост"s, DocumentStatus::ACTUAL, { 7, 2, 7 });
+    search_server.AddDocument(2, "ухоженный пёс выразительные глаза"s, DocumentStatus::ACTUAL, { 5, -12, 2, 1 });
+    search_server.AddDocument(3, "ухоженный скворец евгений"s, DocumentStatus::BANNED, { 9 });
 
-	const int document_count = search_server.GetDocumentCount();
-	for (int document_id = 0; document_id < document_count; ++document_id) {
-		const auto [words, status] = search_server.MatchDocument("пушистый кот"s, document_id);
-		PrintMatchDocumentResult(document_id, words, status);
-	}
+    cout << "ACTUAL by default:"s << endl;
+    for (const Document& document : search_server.FindTopDocuments("пушистый ухоженный кот"s)) {
+        PrintDocument(document);
+    }
+
+    cout << "ACTUAL:"s << endl;
+    for (const Document& document : search_server.FindTopDocuments("пушистый ухоженный кот"s, [](int document_id, DocumentStatus status, int rating) { return status == DocumentStatus::ACTUAL; })) {
+        PrintDocument(document);
+    }
+
+    cout << "Even ids:"s << endl;
+    for (const Document& document : search_server.FindTopDocuments("пушистый ухоженный кот"s, [](int document_id, DocumentStatus status, int rating) { return document_id % 2 == 0; })) {
+        PrintDocument(document);
+    }
+
+    return 0;
 }
