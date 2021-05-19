@@ -55,21 +55,26 @@ enum class DocumentStatus {
     REMOVED,
 };
 
+//Функциональный объект для передачи в FindTopDocuments
 auto key_mapper = [](const Document& document) {
     return document.id;
 };
 
 class SearchServer {
 public:
+    //Создание списка стоп-слов
     void SetStopWords(const string& text) {
         for (const string& word : SplitIntoWords(text)) {
             stop_words_.insert(word);
         }
     }
+
+    //Возврат количества документов
     size_t GetDocumentCount() {
         return documents_.size();
     }
 
+    //Добавление нового документа
     void AddDocument(int document_id, const string& document, DocumentStatus status, const vector<int>& ratings) {
         const vector<string> words = SplitIntoWordsNoStop(document);
         const double inv_word_count = 1.0 / words.size();
@@ -100,14 +105,14 @@ public:
                 }
             });
 
-
-
+        //Усечение вывода до требуемого максимума
         if (matched_documents.size() > MAX_RESULT_DOCUMENT_COUNT) {
             matched_documents.resize(MAX_RESULT_DOCUMENT_COUNT);
         }
         return matched_documents;
     }
 
+    //Создание вектора наиболее релевантных документов для вывода с отсутствующим вторым аргументом либо со статусом в качестве аргумента
     vector<Document> FindTopDocuments(const string& query, DocumentStatus status = DocumentStatus::ACTUAL) const {
         switch (status)
         {
@@ -167,14 +172,16 @@ private:
         DocumentStatus status;
     };
 
-    set<string> stop_words_;
-    map<string, map<int, double>> word_to_document_freqs_;
-    map<int, DocumentData> documents_;
+    set<string> stop_words_; //Список стоп-слов
+    map<string, map<int, double>> word_to_document_freqs_; //Словарь "Слово" - "Документ - TF"
+    map<int, DocumentData> documents_; //Словарь "Документ" - "Рейтинг - Статус"
 
+    //Проверка входящего слова на принадлежность к стоп-словам
     bool IsStopWord(const string& word) const {
         return stop_words_.count(word) > 0;
     }
 
+    //Разбивка строки запроса на вектор слов, исключая стоп-слова
     vector<string> SplitIntoWordsNoStop(const string& text) const {
         vector<string> words;
         for (const string& word : SplitIntoWords(text)) {
@@ -185,6 +192,7 @@ private:
         return words;
     }
 
+    //Метод подсчета среднего рейтинга
     static int ComputeAverageRating(const vector<int>& ratings) {
         if (ratings.empty()) {
             return 0;
@@ -202,6 +210,7 @@ private:
         bool is_stop;
     };
 
+    //Отсечение "-" у минус-слов
     QueryWord ParseQueryWord(string text) const {
         bool is_minus = false;
         // Word shouldn't be empty
@@ -221,6 +230,7 @@ private:
         set<string> minus_words;
     };
 
+    //Создание списков плюс- и минус-слов
     Query ParseQuery(const string& text) const {
         Query query;
         for (const string& word : SplitIntoWords(text)) {
@@ -237,11 +247,12 @@ private:
         return query;
     }
 
-    // Existence required
+    //Вычисление IDF слова
     double ComputeWordInverseDocumentFreq(const string& word) const {
         return log(documents_.size() * 1.0 / word_to_document_freqs_.at(word).size());
     }
     
+    //Поиск всех подходящих по запросу документов
     template <typename KeyMapper>
     vector<Document> FindAllDocuments(const Query& query, KeyMapper key_mapper) const {
         map<int, double> document_to_relevance;
@@ -257,6 +268,7 @@ private:
             }
         }
 
+        //Исключение документов с минус-словами
         for (const string& word : query.minus_words) {
             if (word_to_document_freqs_.count(word) == 0) {
                 continue;
@@ -266,6 +278,7 @@ private:
             }
         }
 
+        //Создание вектора вывода поискового запроса
         vector<Document> matched_documents;
         for (const auto [document_id, relevance] : document_to_relevance) {
             matched_documents.push_back({
@@ -277,6 +290,8 @@ private:
         return matched_documents;
     }
 };
+
+//Печать совпадающих слов в запросе и документах
 void PrintMatchDocumentResult(int document_id, const vector<string>& words, DocumentStatus status) {
     cout << "{ "s
         << "document_id = "s << document_id << ", "s
@@ -287,6 +302,8 @@ void PrintMatchDocumentResult(int document_id, const vector<string>& words, Docu
     }
     cout << "}"s << endl;
 }
+
+//Печать документа
 void PrintDocument(const Document& document) {
     cout << "{ "s
         << "document_id = "s << document.id << ", "s
