@@ -113,22 +113,9 @@ public:
     }
 
     //Создание вектора наиболее релевантных документов для вывода с отсутствующим вторым аргументом либо со статусом в качестве аргумента
-    vector<Document> FindTopDocuments(const string& query, DocumentStatus status = DocumentStatus::ACTUAL) const {
-        switch (status)
-        {
-        case DocumentStatus::IRRELEVANT:
-            return FindTopDocuments(query, [](int document_id, DocumentStatus status, int rating) { return status == DocumentStatus::IRRELEVANT; });
-            break;
-        case DocumentStatus::BANNED:
-            return FindTopDocuments(query, [](int document_id, DocumentStatus status, int rating) { return status == DocumentStatus::BANNED; });
-            break;
-        case DocumentStatus::REMOVED:
-            return FindTopDocuments(query, [](int document_id, DocumentStatus status, int rating) { return status == DocumentStatus::REMOVED; });
-            break;
-        default:
-            return FindTopDocuments(query, [](int document_id, DocumentStatus status, int rating) { return status == DocumentStatus::ACTUAL; });
-            break;
-        }
+    vector<Document> FindTopDocuments(const string& query, DocumentStatus doc_status = DocumentStatus::ACTUAL) const {
+
+        return FindTopDocuments(query, [doc_status](int document_id, DocumentStatus status, int rating) { return status == doc_status; });
     }
 
     //Метод возврата списка совпавших слов запроса
