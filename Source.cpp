@@ -93,7 +93,7 @@ public:
     vector<Document> FindTopDocuments(const string& query, KeyMapper key_mapper) const {
         Query structuredQuery = ParseQuery(query);
         auto matched_documents = FindAllDocuments(structuredQuery, key_mapper);
-       
+
         //Сортировка по убыванию релевантности / возрастанию рейтинга
         sort(matched_documents.begin(), matched_documents.end(),
             [](const Document& lhs, const Document& rhs) {
@@ -113,22 +113,9 @@ public:
     }
 
     //Создание вектора наиболее релевантных документов для вывода с отсутствующим вторым аргументом либо со статусом в качестве аргумента
-    vector<Document> FindTopDocuments(const string& query, DocumentStatus status = DocumentStatus::ACTUAL) const {
-        switch (status)
-        {
-        case DocumentStatus::IRRELEVANT:
-            return FindTopDocuments(query, [](int document_id, DocumentStatus status, int rating) { return status == DocumentStatus::IRRELEVANT; });
-            break;
-        case DocumentStatus::BANNED:
-            return FindTopDocuments(query, [](int document_id, DocumentStatus status, int rating) { return status == DocumentStatus::BANNED; });
-            break;
-        case DocumentStatus::REMOVED:
-            return FindTopDocuments(query, [](int document_id, DocumentStatus status, int rating) { return status == DocumentStatus::REMOVED; });
-            break;
-        default:
-            return FindTopDocuments(query, [](int document_id, DocumentStatus status, int rating) { return status == DocumentStatus::ACTUAL; });
-            break;
-        }
+    vector<Document> FindTopDocuments(const string& query, DocumentStatus doc_status = DocumentStatus::ACTUAL) const {
+
+        return FindTopDocuments(query, [doc_status](int document_id, DocumentStatus status, int rating) { return status == doc_status; });
     }
 
     //Метод возврата списка совпавших слов запроса
@@ -251,7 +238,7 @@ private:
     double ComputeWordInverseDocumentFreq(const string& word) const {
         return log(documents_.size() * 1.0 / word_to_document_freqs_.at(word).size());
     }
-    
+
     //Поиск всех подходящих по запросу документов
     template <typename KeyMapper>
     vector<Document> FindAllDocuments(const Query& query, KeyMapper key_mapper) const {
@@ -316,10 +303,10 @@ int main() {
     SearchServer search_server;
     search_server.SetStopWords("и в на"s);
 
-    search_server.AddDocument(0, "белый кот и модный ошейник"s,        DocumentStatus::ACTUAL, {8, -3});
-    search_server.AddDocument(1, "пушистый кот пушистый хвост"s,       DocumentStatus::ACTUAL, {7, 2, 7});
-    search_server.AddDocument(2, "ухоженный пёс выразительные глаза"s, DocumentStatus::ACTUAL, {5, -12, 2, 1});
-    search_server.AddDocument(3, "ухоженный скворец евгений"s,         DocumentStatus::BANNED, {9});
+    search_server.AddDocument(0, "белый кот и модный ошейник"s, DocumentStatus::ACTUAL, { 8, -3 });
+    search_server.AddDocument(1, "пушистый кот пушистый хвост"s, DocumentStatus::ACTUAL, { 7, 2, 7 });
+    search_server.AddDocument(2, "ухоженный пёс выразительные глаза"s, DocumentStatus::ACTUAL, { 5, -12, 2, 1 });
+    search_server.AddDocument(3, "ухоженный скворец евгений"s, DocumentStatus::BANNED, { 9 });
 
     cout << "ACTUAL by default:"s << endl;
     for (const Document& document : search_server.FindTopDocuments("пушистый ухоженный кот"s)) {
