@@ -30,6 +30,9 @@ vector<string> SplitIntoWords(const string& text) {
     string word;
     for (const char c : text) {
         if (c == ' ') {
+            if (word == "") {
+                continue;
+            }
             words.push_back(word);
             word = "";
         }
@@ -43,9 +46,14 @@ vector<string> SplitIntoWords(const string& text) {
 }
 
 struct Document {
-    int id;
-    double relevance;
-    int rating;
+    Document() = default;
+    Document(int id_, double relevance_, int rating_)
+    : id(id_), relevance(relevance_), rating(rating_) {
+
+    }
+    int id = 0;
+    double relevance = 0.0;
+    int rating = 0;
 };
 
 enum class DocumentStatus {
@@ -62,12 +70,22 @@ auto key_mapper = [](const Document& document) {
 
 class SearchServer {
 public:
-    //Создание списка стоп-слов
-    void SetStopWords(const string& text) {
-        for (const string& word : SplitIntoWords(text)) {
+    SearchServer() = default;
+
+    explicit SearchServer(string stop_words) {
+        vector<string> stop_words_vector = SplitIntoWords(stop_words);
+        for (const string& word : stop_words_vector) {
             stop_words_.insert(word);
         }
     }
+
+   template <typename StringCollection>
+    explicit SearchServer(const StringCollection& stop_words) {
+        for (const string& word : stop_words) {
+            stop_words_.insert(word);
+        }
+    }
+
 
     //Возврат количества документов
     size_t GetDocumentCount() {
@@ -334,10 +352,14 @@ void TestExcludeStopWordsFromAddedDocumentContent() {
     // Затем убеждаемся, что поиск этого же слова, входящего в список стоп-слов,
     // возвращает пустой результат
     {
-        SearchServer server;
-        server.SetStopWords("in the"s);
-        server.AddDocument(doc_id, content, DocumentStatus::ACTUAL, ratings);
-        ASSERT_HINT(server.FindTopDocuments("in"s).empty(), "Something wrong with excluding stop-words"s);
+        SearchServer server0("in       the"s);
+        server0.AddDocument(doc_id, content, DocumentStatus::ACTUAL, ratings);
+        ASSERT_HINT(server0.FindTopDocuments("in"s).empty(), "Something wrong with excluding stop-words"s);
+
+        vector<string> stop_words = { "in"s, "the"s };
+        SearchServer server1(stop_words);
+        server1.AddDocument(doc_id, content, DocumentStatus::ACTUAL, ratings);
+        ASSERT_HINT(server1.FindTopDocuments("in"s).empty(), "Something wrong with excluding stop-words"s);
     }
 }
 
@@ -481,9 +503,8 @@ void TestSearchServer() {
 
 int main() {
     TestSearchServer();
-    SearchServer search_server;
-    search_server.SetStopWords("и в на"s);
-
+    SearchServer search_server ("и в   на"s);
+ 
     search_server.AddDocument(0, "белый кот и модный ошейник"s, DocumentStatus::ACTUAL, { 8, -3 });
     search_server.AddDocument(1, "пушистый кот пушистый хвост"s, DocumentStatus::ACTUAL, { 7, 2, 7 });
     search_server.AddDocument(2, "ухоженный пёс выразительные глаза"s, DocumentStatus::ACTUAL, { 5, -12, 2, 1 });
