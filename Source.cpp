@@ -73,10 +73,6 @@ auto key_mapper = [](const Document& document) {
 class SearchServer {
 public:
 
-    // Defines an invalid document id
-    // You can refer to this constant as SearchServer::INVALID_DOCUMENT_ID
-    inline static constexpr int INVALID_DOCUMENT_ID = -1;
-
     SearchServer() = default;
 
     explicit SearchServer(string stop_words) {
