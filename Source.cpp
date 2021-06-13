@@ -171,7 +171,20 @@ public:
 
 
     //Метод возврата списка совпавших слов запроса
-    tuple<vector<string>, DocumentStatus> MatchDocument(const string& raw_query, int document_id) const {
+    [[nodiscard]] bool MatchDocument(const string& raw_query, int document_id,
+        tuple<vector<string>, DocumentStatus>& result) const {
+        if (!IsValidWord(raw_query)) {
+            return false;
+        }
+        else if (raw_query.find("--"s) != string::npos) {
+            return false;
+        }
+        else if (raw_query.find("- "s) != string::npos) {
+            return false;
+        }
+        else if (raw_query[size(raw_query) - 1] == '-') {
+            return false;
+        }
         Query query = ParseQuery(raw_query);
         set<string> BingoWords = {}; //Чтобы не сортировать и не проверять на совпадение
 
@@ -202,7 +215,19 @@ public:
             }
         }
         vector<string> v(BingoWords.begin(), BingoWords.end());
-        return tuple(v, documents_.at(document_id).status);
+        result = tuple(v, documents_.at(document_id).status);
+        return true;
+    }
+
+    int GetDocumentId(int index) const {   
+        int i = 0;
+        for (const auto& doc_ : documents_) {
+            if (i == index) {
+                return doc_.first;
+            }
+            ++i;
+        }
+        return INVALID_DOCUMENT_ID;
     }
 
 private:
@@ -337,20 +362,6 @@ private:
             });
     }
 
-    int GetDocumentId(int index) const {
-        if (index < 0 || index >= static_cast<int>(documents_.size())) {
-            return INVALID_DOCUMENT_ID;
-        }
-        else {
-            int i = 0;
-            for (const auto& doc_ : documents_) {
-                if (i == index) {
-                    return doc_.first;
-                }
-                ++i;
-            }
-        }
-    }
 };
 
 //Печать совпадающих слов в запросе и документах
