@@ -192,7 +192,6 @@ public:
                 }
             }
         }
-        ;
 
         //Исключение документов с минус-словами
         for (const string& word : query.minus_words) {
