@@ -75,16 +75,6 @@ public:
 
     SearchServer() = default;
 
-    explicit SearchServer(string stop_words) {
-        if (!IsValidWord(stop_words)) {
-            throw invalid_argument("Stop-words contain special symbols"s);
-        }
-        vector<string> stop_words_vector = SplitIntoWords(stop_words);
-        for (const string& word : stop_words_vector) {
-            stop_words_.insert(word);
-        }
-    }
-
     template <typename StringCollection>
     explicit SearchServer(const StringCollection& stop_words) {
         for (const string& word : stop_words) {
@@ -95,6 +85,10 @@ public:
         }
     }
 
+    explicit SearchServer(string stop_words) 
+        :SearchServer(SplitIntoWords(stop_words))
+    {
+    }
 
     //Возврат количества документов
     size_t GetDocumentCount() const {
@@ -125,18 +119,7 @@ public:
     //Создание вектора наиболее релевантных документов для вывода
     template <typename KeyMapper>
     vector<Document> FindTopDocuments(const string& query, KeyMapper key_mapper) const {
-        if (!IsValidWord(query)) {
-            throw invalid_argument("Query contains special symbols"s);
-        }
-        else if (query.find("--"s) != string::npos) {
-            throw invalid_argument("Query contains double-minus"s);
-        }
-        else if (query.find("- "s) != string::npos) {
-            throw invalid_argument("No word after '-' symbol"s);
-        }
-        else if (query[size(query) - 1] == '-') {
-            throw invalid_argument("No word after '-' symbol"s);
-        }
+
         Query structuredQuery = ParseQuery(query);
         auto matched_documents = FindAllDocuments(structuredQuery, key_mapper);
 
@@ -165,18 +148,7 @@ public:
 
     //Метод возврата списка совпавших слов запроса
     tuple<vector<string>, DocumentStatus> MatchDocument(const string& raw_query, int document_id) const {
-        if (!IsValidWord(raw_query)) {
-            throw invalid_argument("Query contains special symbols"s);
-        }
-        else if (raw_query.find("--"s) != string::npos) {
-            throw invalid_argument("Query contains double-minus"s);
-        }
-        else if (raw_query.find("- "s) != string::npos) {
-            throw invalid_argument("No word after '-' symbol"s);
-        }
-        else if (raw_query[size(raw_query) - 1] == '-') {
-            throw invalid_argument("No word after '-' symbol"s);
-        }
+        
         Query query = ParseQuery(raw_query);
         set<string> BingoWords = {}; //Чтобы не сортировать и не проверять на совпадение
 
@@ -267,7 +239,6 @@ private:
     //Отсечение "-" у минус-слов
     QueryWord ParseQueryWord(string text) const {
         bool is_minus = false;
-        // Word shouldn't be empty
         if (text[0] == '-') {
             is_minus = true;
             text = text.substr(1);
@@ -285,9 +256,21 @@ private:
     };
 
     //Создание списков плюс- и минус-слов
-    Query ParseQuery(const string& text) const {
+    Query ParseQuery(const string& raw_query) const {
+        if (!IsValidWord(raw_query)) {
+            throw invalid_argument("Query contains special symbols"s);
+        }
+        else if (raw_query.find("--"s) != string::npos) {
+            throw invalid_argument("Query contains double-minus"s);
+        }
+        else if (raw_query.find("- "s) != string::npos) {
+            throw invalid_argument("No word after '-' symbol"s);
+        }
+        else if (raw_query[size(raw_query) - 1] == '-') {
+            throw invalid_argument("No word after '-' symbol"s);
+        }
         Query query;
-        for (const string& word : SplitIntoWords(text)) {
+        for (const string& word : SplitIntoWords(raw_query)) {
             const QueryWord query_word = ParseQueryWord(word);
             if (!query_word.is_stop) {
                 if (query_word.is_minus) {
@@ -387,7 +370,7 @@ void TestExcludeStopWordsFromAddedDocumentContent() {
     // Затем убеждаемся, что поиск этого же слова, входящего в список стоп-слов,
     // возвращает пустой результат
     {
-        SearchServer server0("in       the"s);
+        SearchServer server0("in the"s);
         server0.AddDocument(doc_id, content, DocumentStatus::ACTUAL, ratings);
         ASSERT_HINT(server0.FindTopDocuments("in"s).empty(), "Something wrong with excluding stop-words"s);
         vector<string> stop_words = { "in"s, "the"s };
