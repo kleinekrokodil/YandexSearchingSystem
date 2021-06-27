@@ -658,7 +658,7 @@ auto Paginate(const Container& c, size_t page_size) {
 
 class RequestQueue {
 public:
-    explicit RequestQueue(const SearchServer& search_server) 
+    explicit RequestQueue(const SearchServer& search_server)
         :search_server_(search_server)
     {
     }
@@ -698,7 +698,7 @@ private:
     deque<QueryResult> requests_;
     const static int sec_in_day_ = 1440;
     const SearchServer& search_server_;
-    int no_res_requests;
+    int no_res_requests = 0;
 };
 
 int main() {
