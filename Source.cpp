@@ -9,6 +9,7 @@
 #include <cassert>
 #include <optional>
 #include <stdexcept>
+#include <iterator>
 
 using namespace std;
 
@@ -338,6 +339,7 @@ private:
 };
 
 //Тестирующий блок
+/*
 void AssertImpl(bool value, const string& expr_str, const string& file, const string& func, unsigned line,
     const string& hint) {
     if (!value) {
@@ -562,24 +564,113 @@ void MatchDocuments(const SearchServer& search_server, const string& query) {
     catch (const exception& e) {
         cout << "Ошибка матчинга документов на запрос "s << query << ": "s << e.what() << endl;
     }
+}*/
+
+template <typename Iterator>
+class IteratorRange {
+public:
+    IteratorRange(Iterator& page_begin, Iterator& page_end) :
+        page_begin_(page_begin),
+        page_end_(page_end)
+    {
+    }
+    Iterator begin() const {
+        return page_begin_;
+    }
+    Iterator end() const {
+        return page_end_;
+    }
+    size_t size() const {
+        return distance(page_begin_, page_end_);
+    }
+private:
+    Iterator page_begin_;
+    Iterator page_end_;
+};
+
+template <typename Iterator>
+class Paginator {
+public:
+    Paginator(Iterator begin, Iterator end, const int& page_size) {
+        if (page_size < 1) {
+            throw invalid_argument("Page size has negative or zero value"s);
+        }
+        auto doc_size = distance(begin, end);
+        if (doc_size % page_size == 0) {
+            size_ = doc_size / page_size;
+        }
+        else {
+            size_ = doc_size / page_size + 1;
+        }
+        auto page_begin = begin;
+        auto page_end = begin;
+        for (size_t i = 0; i < size_; ++i) {
+            if (i == size_ - 1) {
+                page_end = end;
+            }
+            else {
+                advance(page_end, page_size);
+            }
+            IteratorRange page(page_begin, page_end);
+            result_.push_back(page);
+            if (i == size_ - 1) {
+                continue;
+            }
+            else {
+                advance(page_begin, page_size);
+            }
+        }
+    }
+    auto begin() const {
+        return result_.begin();
+    }
+    auto end() const {
+        return result_.end();
+    }
+    size_t size() const {
+        return size_;
+    }
+
+private:
+    vector<IteratorRange<Iterator>> result_;
+    size_t size_;
+};
+
+
+ostream& operator<<(ostream& output, const Document& doc) {
+    output << "{ document_id = "s << doc.id << ", relevance = "s << doc.relevance << ", rating = "s << doc.rating << " }"s;
+    return output;
+}
+
+template <typename Iterator>
+ostream& operator<<(ostream& output, const IteratorRange<Iterator>& range) {
+    for (auto it = range.begin(); it != range.end(); ++it) {
+        output << *it;
+    }
+    return output;
+}
+
+template <typename Container>
+auto Paginate(const Container& c, size_t page_size) {
+    return Paginator(begin(c), end(c), page_size);
 }
 
 int main() {
-    TestSearchServer();
-    SearchServer search_server("и в на"s);
+    SearchServer search_server("and with"s);
 
-    AddDocument(search_server, 1, "пушистый кот пушистый хвост"s, DocumentStatus::ACTUAL, { 7, 2, 7 });
-    AddDocument(search_server, 1, "пушистый пёс и модный ошейник"s, DocumentStatus::ACTUAL, { 1, 2 });
-    AddDocument(search_server, -1, "пушистый пёс и модный ошейник"s, DocumentStatus::ACTUAL, { 1, 2 });
-    AddDocument(search_server, 3, "большой пёс скво\x12рец евгений"s, DocumentStatus::ACTUAL, { 1, 3, 2 });
-    AddDocument(search_server, 4, "большой пёс скворец евгений"s, DocumentStatus::ACTUAL, { 1, 1, 1 });
+    search_server.AddDocument(1, "funny pet and nasty rat"s, DocumentStatus::ACTUAL, { 7, 2, 7 });
+    search_server.AddDocument(2, "funny pet with curly hair"s, DocumentStatus::ACTUAL, { 1, 2, 3 });
+    search_server.AddDocument(3, "big cat nasty hair"s, DocumentStatus::ACTUAL, { 1, 2, 8 });
+    search_server.AddDocument(4, "big dog cat Vladislav"s, DocumentStatus::ACTUAL, { 1, 3, 2 });
+    search_server.AddDocument(5, "big dog hamster Borya"s, DocumentStatus::ACTUAL, { 1, 1, 1 });
 
-    FindTopDocuments(search_server, "пушистый -пёс"s);
-    FindTopDocuments(search_server, "пушистый --кот"s);
-    FindTopDocuments(search_server, "пушистый -"s);
+    const auto search_results = search_server.FindTopDocuments("curly dog"s);
+    int page_size = 2;
+    const auto pages = Paginate(search_results, page_size);
 
-    MatchDocuments(search_server, "пушистый пёс"s);
-    MatchDocuments(search_server, "модный -кот"s);
-    MatchDocuments(search_server, "модный --пёс"s);
-    MatchDocuments(search_server, "пушистый - хвост"s);
+    // Выводим найденные документы по страницам
+    for (auto page = pages.begin(); page != pages.end(); ++page) {
+        cout << *page << endl;
+        cout << "Page break"s << endl;
+    }
 }
