@@ -46,7 +46,7 @@ public:
     //Создание вектора наиболее релевантных документов для вывода
     template <typename KeyMapper>
     std::vector<Document> FindTopDocuments(const std::string& query, KeyMapper key_mapper) const {
-
+        
         Query structuredQuery = ParseQuery(query);
         auto matched_documents = FindAllDocuments(structuredQuery, key_mapper);
 
