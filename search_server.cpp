@@ -29,6 +29,7 @@ void SearchServer::AddDocument(int document_id, const string& document, Document
             ComputeAverageRating(ratings),
             status
         });
+    document_ids_.insert(document_id);
 }
 
 //Метод возврата списка совпавших слов запроса
@@ -64,17 +65,6 @@ tuple<vector<string>, DocumentStatus> SearchServer::MatchDocument(const string& 
     }
     vector<string> v(BingoWords.begin(), BingoWords.end());
     return tuple(v, documents_.at(document_id).status);
-}
-
-int SearchServer::GetDocumentId(int index) const {
-    int i = 0;
-    for (const auto& doc_ : documents_) {
-        if (i == index) {
-            return doc_.first;
-        }
-        ++i;
-    }
-    throw out_of_range("Index is out of range");
 }
 
 //Проверка входящего слова на принадлежность к стоп-словам
@@ -205,9 +195,7 @@ void FindTopDocuments(const SearchServer& search_server, const string& raw_query
 void MatchDocuments(const SearchServer& search_server, const string& query) {
     try {
         cout << "Matching documents for the query: "s << query << endl;
-        const int document_count = search_server.GetDocumentCount();
-        for (int index = 0; index < document_count; ++index) {
-            const int document_id = search_server.GetDocumentId(index);
+        for (const int document_id : search_server) {
             const auto [words, status] = search_server.MatchDocument(query, document_id);
             PrintMatchDocumentResult(document_id, words, status);
         }
@@ -216,3 +204,25 @@ void MatchDocuments(const SearchServer& search_server, const string& query) {
         cout << "Error matching documents for the query: "s << query << ": "s << e.what() << endl;
     }
 }
+
+//Метод получения частот слов по id документа
+const map<string, double>& SearchServer::GetWordFrequencies(int document_id) const {
+    static map<string, double> words_freqs;
+    words_freqs.clear();
+    for (auto [word, doc] : word_to_document_freqs_) {
+        if (doc.count(document_id)) {
+            words_freqs.insert({ word, doc.at(document_id) });
+        }
+    }
+        return words_freqs;
+}
+
+//Метод удаления документов из поискового сервера
+void SearchServer::RemoveDocument(int document_id) {
+    for (auto [word, doc] : word_to_document_freqs_) {
+        doc.erase(document_id);
+    }
+    document_ids_.erase(document_id);
+    documents_.erase(document_id);
+}
+
