@@ -2,7 +2,9 @@
 #include "request_queue.h"
 #include "paginator.h"
 #include "log_duration.h"
+#include "test_example_functions.h"
 #include <iostream>
+
 
 
 using namespace std;
@@ -10,6 +12,7 @@ extern const int MAX_RESULT_DOCUMENT_COUNT = 5;
 
 
 int main() {
+    TestSearchServer();
     SearchServer search_server("and in at"s);
     RequestQueue request_queue(search_server);
 
@@ -48,8 +51,24 @@ int main() {
             cout << "Page break"s << endl;
         }
     }
+    //main из спринта 3
+    SearchServer search_server2("and in at"s);
 
-    // Выводим найденные документы по страницам
+    AddDocument(search_server2, 1, "curly cat curly tail"s, DocumentStatus::ACTUAL, { 7, 2, 7 });
+    AddDocument(search_server2, 2, "curly dog and fancy collar"s, DocumentStatus::ACTUAL, { 1, 2, 3 });
+    AddDocument(search_server2, 3, "big cat fancy collar "s, DocumentStatus::ACTUAL, { 1, 2, 8 });
+    AddDocument(search_server2, 4, "big dog sparrow Eugene"s, DocumentStatus::ACTUAL, { 1, 3, 2 });
+    AddDocument(search_server2, 5, "big dog sparrow Vasiliy"s, DocumentStatus::ACTUAL, { 1, 1, 1 });
+
+    FindTopDocuments(search_server2, "curly -dog"s);
+    FindTopDocuments(search_server2, "curly --cat"s);
+    FindTopDocuments(search_server2, "curly -"s);
+
+    MatchDocuments(search_server2, "curly dog"s);
+    MatchDocuments(search_server2, "big -cat"s);
+    MatchDocuments(search_server2, "big --dog"s);
+    MatchDocuments(search_server2, "curly - collar"s);
+
    
     return 0;
 }
