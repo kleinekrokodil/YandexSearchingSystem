@@ -62,7 +62,7 @@ public:
             });
 
         //Усечение вывода до требуемого максимума
-        if (matched_documents.size() > MAX_RESULT_DOCUMENT_COUNT) {
+        if (matched_documents.size() > unsigned(MAX_RESULT_DOCUMENT_COUNT)) {
             matched_documents.resize(MAX_RESULT_DOCUMENT_COUNT);
         }
         return matched_documents;
@@ -162,3 +162,14 @@ private:
 
     static bool IsValidWord(const std::string& word);
 };
+
+void PrintDocument(const Document& document);
+
+void PrintMatchDocumentResult(int document_id, const std::vector<std::string>& words, DocumentStatus status);
+
+void AddDocument(SearchServer& search_server, int document_id, const std::string& document, DocumentStatus status,
+    const std::vector<int>& ratings);
+
+void FindTopDocuments(const SearchServer& search_server, const std::string& raw_query);
+
+void MatchDocuments(const SearchServer& search_server, const std::string& query);
