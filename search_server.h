@@ -37,6 +37,15 @@ public:
     {
     }
 
+    //Методы begin и end
+    std::set<int>::const_iterator begin() const{
+        return document_ids_.begin();
+    }
+
+    std::set<int>::const_iterator end() const{
+        return document_ids_.end();
+    }
+
     //Возврат количества документов
     size_t GetDocumentCount() const;
 
@@ -81,7 +90,11 @@ public:
     //Метод возврата списка совпавших слов запроса
     std::tuple<std::vector<std::string>, DocumentStatus> MatchDocument(const std::string& raw_query, int document_id) const;
 
-    int GetDocumentId(int index) const;
+    //Метод получения частот слов по id документа
+    const std::map<std::string, double>& GetWordFrequencies(int document_id) const;
+
+    //Метод удаления документов из поискового сервера
+    void RemoveDocument(int document_id);
 
 private:
     struct DocumentData {
@@ -92,6 +105,7 @@ private:
     std::set<std::string> stop_words_; //Список стоп-слов
     std::map<std::string, std::map<int, double>> word_to_document_freqs_; //Словарь "Слово" - "Документ - TF"
     std::map<int, DocumentData> documents_; //Словарь "Документ" - "Рейтинг - Статус"
+    std::set<int> document_ids_;
 
     //Проверка входящего слова на принадлежность к стоп-словам
     bool IsStopWord(const std::string& word) const;
@@ -173,3 +187,4 @@ void AddDocument(SearchServer& search_server, int document_id, const std::string
 void FindTopDocuments(const SearchServer& search_server, const std::string& raw_query);
 
 void MatchDocuments(const SearchServer& search_server, const std::string& query);
+
