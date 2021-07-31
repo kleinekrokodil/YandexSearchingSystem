@@ -106,6 +106,7 @@ private:
     std::map<std::string, std::map<int, double>> word_to_document_freqs_; //Словарь "Слово" - "Документ - TF"
     std::map<int, DocumentData> documents_; //Словарь "Документ" - "Рейтинг - Статус"
     std::set<int> document_ids_;
+    std::map<int, std::map<std::string, double>> document_to_word_freqs_;
 
     //Проверка входящего слова на принадлежность к стоп-словам
     bool IsStopWord(const std::string& word) const;

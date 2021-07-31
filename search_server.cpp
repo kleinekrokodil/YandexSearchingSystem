@@ -23,6 +23,7 @@ void SearchServer::AddDocument(int document_id, const string& document, Document
     const double inv_word_count = 1.0 / words.size();
     for (const string& word : words) {
         word_to_document_freqs_[word][document_id] += inv_word_count;
+        document_to_word_freqs_[document_id][word] += inv_word_count;
     }
     documents_.emplace(document_id,
         DocumentData{
@@ -207,22 +208,22 @@ void MatchDocuments(const SearchServer& search_server, const string& query) {
 
 //Метод получения частот слов по id документа
 const map<string, double>& SearchServer::GetWordFrequencies(int document_id) const {
-    static map<string, double> words_freqs;
-    words_freqs.clear();
-    for (auto [word, doc] : word_to_document_freqs_) {
-        if (doc.count(document_id)) {
-            words_freqs.insert({ word, doc.at(document_id) });
-        }
-    }
-        return words_freqs;
-}
+    static const map<string, double> empty_words = {};
+    if (document_to_word_freqs_.count(document_id)) {
+        return document_to_word_freqs_.at(document_id);
+    }//logN
+    else {
+        return empty_words;
+    }      
+}//logN
 
 //Метод удаления документов из поискового сервера
 void SearchServer::RemoveDocument(int document_id) {
-    for (auto [word, doc] : word_to_document_freqs_) {
-        doc.erase(document_id);
-    }
-    document_ids_.erase(document_id);
-    documents_.erase(document_id);
-}
+    for (auto [word, freq] : document_to_word_freqs_.at(document_id)) {
+        word_to_document_freqs_.at(word).erase(document_id);
+    }//WlogN + 1 = WlogN
+    document_to_word_freqs_.erase(document_id);//logN + 1 = logN
+    document_ids_.erase(document_id);//logN + 1
+    documents_.erase(document_id);//logN + 1
+}//WlogN
 
