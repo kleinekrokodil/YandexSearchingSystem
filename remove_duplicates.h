@@ -1,5 +1,5 @@
 #pragma once
 #include "search_server.h"
 
-//Поиск и удаление дубликатов
+//РџРѕРёСЃРє Рё СѓРґР°Р»РµРЅРёРµ РґСѓР±Р»РёРєР°С‚РѕРІ
 void RemoveDuplicates(SearchServer& search_server);
