@@ -23,12 +23,14 @@ void SearchServer::AddDocument(int document_id, const string& document, Document
     const double inv_word_count = 1.0 / words.size();
     for (const string& word : words) {
         word_to_document_freqs_[word][document_id] += inv_word_count;
+        document_to_word_freqs_[document_id][word] += inv_word_count;
     }
     documents_.emplace(document_id,
         DocumentData{
             ComputeAverageRating(ratings),
             status
         });
+    document_ids_.insert(document_id);
 }
 
 //Метод возврата списка совпавших слов запроса
@@ -64,17 +66,6 @@ tuple<vector<string>, DocumentStatus> SearchServer::MatchDocument(const string& 
     }
     vector<string> v(BingoWords.begin(), BingoWords.end());
     return tuple(v, documents_.at(document_id).status);
-}
-
-int SearchServer::GetDocumentId(int index) const {
-    int i = 0;
-    for (const auto& doc_ : documents_) {
-        if (i == index) {
-            return doc_.first;
-        }
-        ++i;
-    }
-    throw out_of_range("Index is out of range");
 }
 
 //Проверка входящего слова на принадлежность к стоп-словам
@@ -186,33 +177,53 @@ void AddDocument(SearchServer& search_server, int document_id, const string& doc
         search_server.AddDocument(document_id, document, status, ratings);
     }
     catch (const exception& e) {
-        cout << "Ошибка добавления документа "s << document_id << ": "s << e.what() << endl;
+        cout << "Error adding document "s << document_id << ": "s << e.what() << endl;
     }
 }
 
 void FindTopDocuments(const SearchServer& search_server, const string& raw_query) {
-    cout << "Результаты поиска по запросу: "s << raw_query << endl;
+    cout << "Search results for the query: "s << raw_query << endl;
     try {
         for (const Document& document : search_server.FindTopDocuments(raw_query)) {
             PrintDocument(document);
         }
     }
     catch (const exception& e) {
-        cout << "Ошибка поиска: "s << e.what() << endl;
+        cout << "Search error: "s << e.what() << endl;
     }
 }
 
 void MatchDocuments(const SearchServer& search_server, const string& query) {
     try {
-        cout << "Матчинг документов по запросу: "s << query << endl;
-        const int document_count = search_server.GetDocumentCount();
-        for (int index = 0; index < document_count; ++index) {
-            const int document_id = search_server.GetDocumentId(index);
+        cout << "Matching documents for the query: "s << query << endl;
+        for (const int document_id : search_server) {
             const auto [words, status] = search_server.MatchDocument(query, document_id);
             PrintMatchDocumentResult(document_id, words, status);
         }
     }
     catch (const exception& e) {
-        cout << "Ошибка матчинга документов на запрос "s << query << ": "s << e.what() << endl;
+        cout << "Error matching documents for the query: "s << query << ": "s << e.what() << endl;
     }
 }
+
+//Метод получения частот слов по id документа
+const map<string, double>& SearchServer::GetWordFrequencies(int document_id) const {
+    static const map<string, double> empty_words = {};
+    if (document_to_word_freqs_.count(document_id)) {
+        return document_to_word_freqs_.at(document_id);
+    }//logN
+    else {
+        return empty_words;
+    }      
+}//logN
+
+//Метод удаления документов из поискового сервера
+void SearchServer::RemoveDocument(int document_id) {
+    for (auto [word, freq] : document_to_word_freqs_.at(document_id)) {
+        word_to_document_freqs_.at(word).erase(document_id);
+    }//WlogN + 1 = WlogN
+    document_to_word_freqs_.erase(document_id);//logN + 1 = logN
+    document_ids_.erase(document_id);//logN + 1
+    documents_.erase(document_id);//logN + 1
+}//WlogN
+
