@@ -52,9 +52,10 @@ vector<string> GenerateQueries(mt19937& generator, const vector<string>& diction
 }
 
 template <typename QueriesProcessor>
-void Test(string mark, QueriesProcessor processor, const SearchServer& search_server, const vector<string>& queries) {
-    LOG_DURATION(mark);
-    const auto documents_lists = processor(search_server, queries);
+void Test(string_view mark, QueriesProcessor processor, const SearchServer& search_server, const vector<string>& queries) {
+    LOG_DURATION("mark");
+    const auto documents = processor(search_server, queries);
+    cout << documents.size() << endl;
 }
 
 #define TEST(processor) Test(#processor, processor, search_server, queries)
