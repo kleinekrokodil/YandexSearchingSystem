@@ -41,27 +41,39 @@ tuple<vector<string>, DocumentStatus> SearchServer::MatchDocument(const string& 
 
     //Обработка вектора плюс-слов
     for (const string& word : query.plus_words) {
-        if (word_to_document_freqs_.count(word) == 0) {
-            continue;
-        }
-        for (auto [document_, TF] : word_to_document_freqs_.at(word)) {
-            //проверка совпадения по документу и запись слова в вектор
-            if (document_ == document_id) {
-                BingoWords.insert(word);
-            }
+        if (word_to_document_freqs_.count(word) != 0 && word_to_document_freqs_.at(word).count(document_id)) {
+            BingoWords.insert(word);
         }
     }
 
     //Исключение документов с минус-словами
     for (const string& word : query.minus_words) {
-        if (word_to_document_freqs_.count(word) == 0) {
-            continue;
+        if (word_to_document_freqs_.count(word) != 0 && word_to_document_freqs_.at(word).count(document_id)) {
+            BingoWords.clear();
         }
-        for (auto [document_, TF] : word_to_document_freqs_.at(word)) {
-            //если совпадение по документу - очистка вектора
-            if (document_ == document_id) {
-                BingoWords.clear();
-            }
+    }
+    vector<string> v(BingoWords.begin(), BingoWords.end());
+    return tuple(v, documents_.at(document_id).status);
+}
+
+std::tuple<std::vector<std::string>, DocumentStatus> SearchServer::MatchDocument(const std::execution::sequenced_policy&, const std::string& raw_query, int document_id) const {
+    return SearchServer::MatchDocument(raw_query, document_id);
+}
+std::tuple<std::vector<std::string>, DocumentStatus> SearchServer::MatchDocument(const std::execution::parallel_policy&, const std::string& raw_query, int document_id) const {
+    Query query = ParseQuery(raw_query);
+    set<string> BingoWords = {}; //Чтобы не сортировать и не проверять на совпадение
+
+    //Обработка вектора плюс-слов
+    for (const string& word : query.plus_words) {
+        if (word_to_document_freqs_.count(word) != 0 && word_to_document_freqs_.at(word).count(document_id)) {
+            BingoWords.insert(word);
+        }
+    }
+
+    //Исключение документов с минус-словами
+    for (const string& word : query.minus_words) {
+        if (word_to_document_freqs_.count(word) != 0 && word_to_document_freqs_.at(word).count(document_id)) {
+            BingoWords.clear();
         }
     }
     vector<string> v(BingoWords.begin(), BingoWords.end());
@@ -228,14 +240,14 @@ void SearchServer::RemoveDocument(int document_id) {
 }//WlogN
 
 void SearchServer::RemoveDocument(const execution::sequenced_policy&, int document_id) {
-    std::for_each(execution::seq, document_to_word_freqs_.at(document_id).begin(), document_to_word_freqs_.at(document_id).end(),
+    for_each(execution::seq, document_to_word_freqs_.at(document_id).begin(), document_to_word_freqs_.at(document_id).end(),
         [&, document_id](auto& el) { word_to_document_freqs_.at(el.first).erase(document_id); });
     document_to_word_freqs_.erase(document_id);//logN + 1 = logN
     document_ids_.erase(document_id);//logN + 1
     documents_.erase(document_id);//logN + 1
 }
 void SearchServer::RemoveDocument(const execution::parallel_policy&, int document_id) {
-    std::for_each(execution::par, document_to_word_freqs_.at(document_id).begin(), document_to_word_freqs_.at(document_id).end(),
+    for_each(execution::par, document_to_word_freqs_.at(document_id).begin(), document_to_word_freqs_.at(document_id).end(),
         [&, document_id](auto& el) { word_to_document_freqs_.at(el.first).erase(document_id); });
     document_to_word_freqs_.erase(document_id);//logN + 1 = logN
     document_ids_.erase(document_id);//logN + 1
