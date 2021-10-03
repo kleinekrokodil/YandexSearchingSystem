@@ -8,6 +8,7 @@
 #include <map>
 #include <algorithm>
 #include <stdexcept>
+#include <execution>
 
 extern const int MAX_RESULT_DOCUMENT_COUNT;
 
@@ -95,6 +96,10 @@ public:
 
     //Метод удаления документов из поискового сервера
     void RemoveDocument(int document_id);
+
+    void RemoveDocument(const std::execution::sequenced_policy&, int document_id);
+
+    void RemoveDocument(const std::execution::parallel_policy&, int document_id); 
 
 private:
     struct DocumentData {

@@ -227,3 +227,17 @@ void SearchServer::RemoveDocument(int document_id) {
     documents_.erase(document_id);//logN + 1
 }//WlogN
 
+void SearchServer::RemoveDocument(const execution::sequenced_policy&, int document_id) {
+    std::for_each(execution::seq, document_to_word_freqs_.at(document_id).begin(), document_to_word_freqs_.at(document_id).end(),
+        [&, document_id](auto& el) { word_to_document_freqs_.at(el.first).erase(document_id); });
+    document_to_word_freqs_.erase(document_id);//logN + 1 = logN
+    document_ids_.erase(document_id);//logN + 1
+    documents_.erase(document_id);//logN + 1
+}
+void SearchServer::RemoveDocument(const execution::parallel_policy&, int document_id) {
+    std::for_each(execution::par, document_to_word_freqs_.at(document_id).begin(), document_to_word_freqs_.at(document_id).end(),
+        [&, document_id](auto& el) { word_to_document_freqs_.at(el.first).erase(document_id); });
+    document_to_word_freqs_.erase(document_id);//logN + 1 = logN
+    document_ids_.erase(document_id);//logN + 1
+    documents_.erase(document_id);//logN + 1
+}

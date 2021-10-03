@@ -51,25 +51,29 @@ vector<string> GenerateQueries(mt19937& generator, const vector<string>& diction
     return queries;
 }
 
-template <typename QueriesProcessor>
-void Test(string_view mark, QueriesProcessor processor, const SearchServer& search_server, const vector<string>& queries) {
-    LOG_DURATION("mark");
-    const auto documents = processor(search_server, queries);
-    cout << documents.size() << endl;
+template <typename ExecutionPolicy>
+void Test(string_view mark, SearchServer search_server, ExecutionPolicy&& policy) {
+    LOG_DURATION(mark);
+    const int document_count = search_server.GetDocumentCount();
+    for (int id = 0; id < document_count; ++id) {
+        search_server.RemoveDocument(policy, id);
+    }
+    cout << search_server.GetDocumentCount() << endl;
 }
 
-#define TEST(processor) Test(#processor, processor, search_server, queries)
+#define TEST(mode) Test(#mode, search_server, execution::mode)
 
 int main() {
     mt19937 generator;
+
     const auto dictionary = GenerateDictionary(generator, 10000, 25);
-    const auto documents = GenerateQueries(generator, dictionary, 100'000, 10);
+    const auto documents = GenerateQueries(generator, dictionary, 10'000, 100);
 
     SearchServer search_server(dictionary[0]);
     for (size_t i = 0; i < documents.size(); ++i) {
         search_server.AddDocument(i, documents[i], DocumentStatus::ACTUAL, { 1, 2, 3 });
     }
 
-    const auto queries = GenerateQueries(generator, dictionary, 10'000, 7);
-    TEST(ProcessQueries);
+    TEST(seq);
+    TEST(par);
 }
