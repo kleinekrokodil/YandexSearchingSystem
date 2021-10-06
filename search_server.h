@@ -9,6 +9,7 @@
 #include <algorithm>
 #include <stdexcept>
 #include <execution>
+#include <string_view>
 
 extern const int MAX_RESULT_DOCUMENT_COUNT;
 
@@ -25,15 +26,20 @@ public:
 
     template <typename StringCollection>
     explicit SearchServer(const StringCollection& stop_words) {
-        for (const std::string& word : stop_words) {
+        for (const auto& word : stop_words) {
             if (!IsValidWord(word)) {
                 throw std::invalid_argument("Stop-words contain special symbols");
             }
-            stop_words_.insert(word);
+            stop_words_.insert(std::string(word.data(), word.size()));
         }
     }
 
     explicit SearchServer(std::string stop_words)
+        :SearchServer(SplitIntoWords(stop_words))
+    {
+    }
+
+    explicit SearchServer(std::string_view stop_words)
         :SearchServer(SplitIntoWords(stop_words))
     {
     }
@@ -51,11 +57,11 @@ public:
     size_t GetDocumentCount() const;
 
     //Добавление нового документа
-    void AddDocument(int document_id, const std::string& document, DocumentStatus status, const std::vector<int>& ratings);
+    void AddDocument(int document_id, const std::string_view document, DocumentStatus status, const std::vector<int>& ratings);
 
     //Создание вектора наиболее релевантных документов для вывода
     template <typename KeyMapper>
-    std::vector<Document> FindTopDocuments(const std::string& query, KeyMapper key_mapper) const {
+    std::vector<Document> FindTopDocuments(const std::string_view query, KeyMapper key_mapper) const {
         
         Query structuredQuery = ParseQuery(query);
         auto matched_documents = FindAllDocuments(structuredQuery, key_mapper);
@@ -79,23 +85,23 @@ public:
     }
 
     //Создание вектора наиболее релевантных документов для вывода со статусом в качестве аргумента
-    std::vector<Document> FindTopDocuments(const std::string& raw_query, DocumentStatus doc_status) const {
+    std::vector<Document> FindTopDocuments(const std::string_view raw_query, DocumentStatus doc_status) const {
         return SearchServer::FindTopDocuments(raw_query, [doc_status](int document_id, DocumentStatus status, int rating) { return status == doc_status; });
     }
 
     //Создание вектора наиболее релевантных документов для вывода с отсутствующим вторым аргументом 
-    std::vector<Document> FindTopDocuments(const std::string& raw_query) const {
+    std::vector<Document> FindTopDocuments(const std::string_view raw_query) const {
         return SearchServer::FindTopDocuments(raw_query, [](int document_id, DocumentStatus status, int rating) { return status == DocumentStatus::ACTUAL; });
     }
 
     //Метод возврата списка совпавших слов запроса
-    std::tuple<std::vector<std::string>, DocumentStatus> MatchDocument(const std::string& raw_query, int document_id) const;
+    std::tuple<std::vector<std::string_view>, DocumentStatus> MatchDocument(const std::string_view raw_query, int document_id) const;
 
-    std::tuple<std::vector<std::string>, DocumentStatus> MatchDocument(const std::execution::sequenced_policy&, const std::string& raw_query, int document_id) const;
-    std::tuple<std::vector<std::string>, DocumentStatus> MatchDocument(const std::execution::parallel_policy&, const std::string& raw_query, int document_id) const;
+    std::tuple<std::vector<std::string_view>, DocumentStatus> MatchDocument(const std::execution::sequenced_policy&, const std::string_view raw_query, int document_id) const;
+    std::tuple<std::vector<std::string_view>, DocumentStatus> MatchDocument(const std::execution::parallel_policy&, const std::string_view raw_query, int document_id) const;
 
     //Метод получения частот слов по id документа
-    const std::map<std::string, double>& GetWordFrequencies(int document_id) const;
+    const std::map<std::string_view, double>& GetWordFrequencies(int document_id) const;
 
     //Метод удаления документов из поискового сервера
     void RemoveDocument(int document_id);
@@ -110,46 +116,47 @@ private:
         DocumentStatus status;
     };
 
-    std::set<std::string> stop_words_; //Список стоп-слов
-    std::map<std::string, std::map<int, double>> word_to_document_freqs_; //Словарь "Слово" - "Документ - TF"
+    std::set<std::string, std::less<>> stop_words_; //Список стоп-слов
+    std::map<std::string_view, std::map<int, double>> word_to_document_freqs_; //Словарь "Слово" - "Документ - TF"
     std::map<int, DocumentData> documents_; //Словарь "Документ" - "Рейтинг - Статус"
     std::set<int> document_ids_;
-    std::map<int, std::map<std::string, double>> document_to_word_freqs_;
+    std::map<int, std::map<std::string_view, double>> document_to_word_freqs_;
+    std::set<std::string, std::less<>> words_; //список слов
 
     //Проверка входящего слова на принадлежность к стоп-словам
-    bool IsStopWord(const std::string& word) const;
+    bool IsStopWord(const std::string_view word) const;
 
     //Разбивка строки запроса на вектор слов, исключая стоп-слова
-    std::vector<std::string> SplitIntoWordsNoStop(const std::string& text) const;
+    std::vector<std::string_view> SplitIntoWordsNoStop(const std::string_view text) const;
 
     //Метод подсчета среднего рейтинга
     static int ComputeAverageRating(const std::vector<int>& ratings);
 
     struct QueryWord {
-        std::string data;
+        std::string_view data;
         bool is_minus;
         bool is_stop;
     };
 
     //Отсечение "-" у минус-слов
-    QueryWord ParseQueryWord(std::string text) const;
+    QueryWord ParseQueryWord(std::string_view text) const;
 
     struct Query {
-        std::set<std::string> plus_words;
-        std::set<std::string> minus_words;
+        std::set<std::string_view> plus_words;
+        std::set<std::string_view> minus_words;
     };
 
     //Создание списков плюс- и минус-слов
-    Query ParseQuery(const std::string& raw_query) const;
+    Query ParseQuery(const std::string_view raw_query) const;
 
     //Вычисление IDF слова
-    double ComputeWordInverseDocumentFreq(const std::string& word) const;
+    double ComputeWordInverseDocumentFreq(const std::string_view) const;
 
     //Поиск всех подходящих по запросу документов
     template <typename KeyMapper>
     std::vector<Document> FindAllDocuments(const Query& query, KeyMapper key_mapper) const {
         std::map<int, double> document_to_relevance;
-        for (const std::string& word : query.plus_words) {
+        for (const auto word : query.plus_words) {
             if (word_to_document_freqs_.count(word) == 0) {
                 continue;
             }
@@ -162,7 +169,7 @@ private:
         }
 
         //Исключение документов с минус-словами
-        for (const std::string& word : query.minus_words) {
+        for (const auto word : query.minus_words) {
             if (word_to_document_freqs_.count(word) == 0) {
                 continue;
             }
@@ -183,7 +190,7 @@ private:
         return matched_documents;
     }
 
-    static bool IsValidWord(const std::string& word);
+    static bool IsValidWord(const std::string_view word);
 };
 
 void PrintDocument(const Document& document);
@@ -193,7 +200,7 @@ void PrintMatchDocumentResult(int document_id, const std::vector<std::string>& w
 void AddDocument(SearchServer& search_server, int document_id, const std::string& document, DocumentStatus status,
     const std::vector<int>& ratings);
 
-void FindTopDocuments(const SearchServer& search_server, const std::string& raw_query);
+void FindTopDocuments(const SearchServer& search_server, const std::string_view raw_query);
 
-void MatchDocuments(const SearchServer& search_server, const std::string& query);
+void MatchDocuments(const SearchServer& search_server, const std::string_view query);
 
