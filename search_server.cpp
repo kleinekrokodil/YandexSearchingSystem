@@ -21,11 +21,13 @@ void SearchServer::AddDocument(int document_id, const string_view document, Docu
 
     const auto words = SplitIntoWordsNoStop(document);
     const double inv_word_count = 1.0 / words.size();
+
     for (const auto& word : words) {
         auto [a, b] = words_.emplace(word);
         string_view word_view = *a;
         word_to_document_freqs_[word_view][document_id] += inv_word_count;
         document_to_word_freqs_[document_id][word_view] += inv_word_count;
+
     }
     documents_.emplace(document_id,
         DocumentData{
@@ -58,6 +60,7 @@ tuple<vector<string_view>, DocumentStatus> SearchServer::MatchDocument(const str
     return tuple(v, documents_.at(document_id).status);
 }
 
+
 std::tuple<vector<string_view>, DocumentStatus> SearchServer::MatchDocument(const std::execution::sequenced_policy&, const string_view raw_query, int document_id) const {
     return SearchServer::MatchDocument(raw_query, document_id);
 }
@@ -81,7 +84,6 @@ std::tuple<vector<string_view>, DocumentStatus> SearchServer::MatchDocument(cons
     vector<string_view> v(BingoWords.begin(), BingoWords.end());
     return tuple(v, documents_.at(document_id).status);
 }
-
 //Проверка входящего слова на принадлежность к стоп-словам
 bool SearchServer::IsStopWord(const string_view word) const {
     return stop_words_.count(word) > 0;
@@ -221,8 +223,10 @@ void MatchDocuments(const SearchServer& search_server, const string_view query) 
 }
 
 //Метод получения частот слов по id документа
+
 const map<string_view, double>& SearchServer::GetWordFrequencies(int document_id) const {
     static const map<string_view, double> empty_words = {};
+
     if (document_to_word_freqs_.count(document_id)) {
         return document_to_word_freqs_.at(document_id);
     }//logN
@@ -241,6 +245,7 @@ void SearchServer::RemoveDocument(int document_id) {
     documents_.erase(document_id);//logN + 1
 }//WlogN
 
+
 void SearchServer::RemoveDocument(const execution::sequenced_policy&, int document_id) {
     for_each(execution::seq, document_to_word_freqs_.at(document_id).begin(), document_to_word_freqs_.at(document_id).end(),
         [&, document_id](auto& el) { word_to_document_freqs_.at(el.first).erase(document_id); });
@@ -255,3 +260,4 @@ void SearchServer::RemoveDocument(const execution::parallel_policy&, int documen
     document_ids_.erase(document_id);//logN + 1
     documents_.erase(document_id);//logN + 1
 }
+

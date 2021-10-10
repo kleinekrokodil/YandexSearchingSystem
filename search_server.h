@@ -40,10 +40,12 @@ public:
     {
     }
 
+
     explicit SearchServer(std::string_view stop_words)
         :SearchServer(SplitIntoWords(stop_words))
     {
     }
+
 
     //Методы begin и end
     std::set<int>::const_iterator begin() const{
@@ -157,6 +159,7 @@ public:
 
     void RemoveDocument(const std::execution::parallel_policy&, int document_id); 
 
+
 private:
     struct DocumentData {
         int rating;
@@ -167,8 +170,10 @@ private:
     std::map<std::string_view, std::map<int, double>> word_to_document_freqs_; //Словарь "Слово" - "Документ - TF"
     std::map<int, DocumentData> documents_; //Словарь "Документ" - "Рейтинг - Статус"
     std::set<int> document_ids_;
+
     std::map<int, std::map<std::string_view, double>> document_to_word_freqs_;
     std::set<std::string, std::less<>> words_; //список слов
+
 
     //Проверка входящего слова на принадлежность к стоп-словам
     bool IsStopWord(const std::string_view word) const;

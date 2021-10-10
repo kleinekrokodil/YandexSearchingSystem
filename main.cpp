@@ -1,24 +1,16 @@
 #include "process_queries.h"
 #include "search_server.h"
 #include "log_duration.h"
+#include "test_example_functions.h"
+#include "remove_duplicates.h"
 #include <iostream>
 #include <string>
 #include <vector>
 #include <random>
 
+
 using namespace std;
 extern const int MAX_RESULT_DOCUMENT_COUNT = 5;
-
-string GenerateWord(mt19937& generator, int max_length) {
-    const int length = uniform_int_distribution(1, max_length)(generator);
-    string word;
-    word.reserve(length);
-    for (int i = 0; i < length; ++i) {
-        word.push_back(static_cast<char>(uniform_int_distribution(97, 122)(generator)));
-    }
-    return word;
-}
-
 vector<string> GenerateDictionary(mt19937& generator, int word_count, int max_length) {
     vector<string> words;
     words.reserve(word_count);
