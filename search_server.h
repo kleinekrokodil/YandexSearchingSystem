@@ -1,6 +1,7 @@
 #pragma once
 #include "document.h"
 #include "string_processing.h"
+#include "concurrent_map.h"
 #include <string>
 #include <set>
 #include <vector>
@@ -94,6 +95,52 @@ public:
         return SearchServer::FindTopDocuments(raw_query, [](int document_id, DocumentStatus status, int rating) { return status == DocumentStatus::ACTUAL; });
     }
 
+    //FindTopDocuments с execution::seq
+    template <typename KeyMapper>
+    std::vector<Document> FindTopDocuments(std::execution::sequenced_policy, const std::string_view query, KeyMapper key_mapper) const {
+        return FindTopDocuments(query, key_mapper);
+    }
+    std::vector<Document> FindTopDocuments(std::execution::sequenced_policy, const std::string_view raw_query, DocumentStatus doc_status) const {
+        return SearchServer::FindTopDocuments(raw_query, [doc_status](int document_id, DocumentStatus status, int rating) { return status == doc_status; });
+    }
+    std::vector<Document> FindTopDocuments(std::execution::sequenced_policy, const std::string_view raw_query) const {
+        return SearchServer::FindTopDocuments(raw_query, [](int document_id, DocumentStatus status, int rating) { return status == DocumentStatus::ACTUAL; });
+    }
+
+
+    //Создание вектора наиболее релевантных документов для вывода (параллельные версии)
+    template <typename KeyMapper>
+    std::vector<Document> FindTopDocuments(std::execution::parallel_policy, const std::string_view query, KeyMapper key_mapper) const {
+
+        Query structuredQuery = ParseQuery(query);
+        auto matched_documents = FindAllDocuments(std::execution::par, structuredQuery, key_mapper);
+
+        //Сортировка по убыванию релевантности / возрастанию рейтинга
+        sort(std::execution::par, matched_documents.begin(), matched_documents.end(),
+            [](const Document& lhs, const Document& rhs) {
+                if (std::abs(lhs.relevance - rhs.relevance) < 1e-6) {
+                    return lhs.rating > rhs.rating;
+                }
+                else {
+                    return lhs.relevance > rhs.relevance;
+                }
+            });
+
+        //Усечение вывода до требуемого максимума
+        if (matched_documents.size() > unsigned(MAX_RESULT_DOCUMENT_COUNT)) {
+            matched_documents.resize(MAX_RESULT_DOCUMENT_COUNT);
+        }
+        return matched_documents;
+    }
+
+    std::vector<Document> FindTopDocuments(std::execution::parallel_policy, const std::string_view raw_query, DocumentStatus doc_status) const {
+        return SearchServer::FindTopDocuments(std::execution::par, raw_query, [doc_status](int document_id, DocumentStatus status, int rating) { return status == doc_status; });
+    }
+
+    std::vector<Document> FindTopDocuments(std::execution::parallel_policy, const std::string_view raw_query) const {
+        return SearchServer::FindTopDocuments(std::execution::par, raw_query, [](int document_id, DocumentStatus status, int rating) { return status == DocumentStatus::ACTUAL; });
+    }
+
     //Метод возврата списка совпавших слов запроса
     std::tuple<std::vector<std::string_view>, DocumentStatus> MatchDocument(const std::string_view raw_query, int document_id) const;
 
@@ -181,6 +228,43 @@ private:
         //Создание вектора вывода поискового запроса
         std::vector<Document> matched_documents;
         for (const auto [document_id, relevance] : document_to_relevance) {
+            matched_documents.push_back({
+                document_id,
+                relevance,
+                documents_.at(document_id).rating
+                });
+        }
+        return matched_documents;
+    }
+
+    template <typename KeyMapper>
+    std::vector<Document> FindAllDocuments(std::execution::parallel_policy, const Query& query, KeyMapper key_mapper) const {
+        ConcurrentMap<int, double> document_to_relevance(4);
+        std::for_each(std::execution::par, query.plus_words.begin(), query.plus_words.end(), 
+            [&](const auto word){
+                if (word_to_document_freqs_.count(word)) {
+                    const double inverse_document_freq = ComputeWordInverseDocumentFreq(word);
+                    for (const auto [document_id, term_freq] : word_to_document_freqs_.at(word)) {
+                        if (key_mapper(documents_.find(document_id)->first, documents_.at(document_id).status, documents_.at(document_id).rating)) {
+                            document_to_relevance[document_id].ref_to_value += term_freq * inverse_document_freq;
+                        }
+                    }
+                }   
+            });
+
+        //Исключение документов с минус-словами
+        std::for_each(std::execution::par, query.minus_words.begin(), query.minus_words.end(),
+            [&](const auto word) {
+                if (word_to_document_freqs_.count(word)) {
+                    for (const auto [document_id, term_freq] : word_to_document_freqs_.at(word)) {
+                        document_to_relevance.erase(document_id);
+                    }
+                }
+            });
+
+        //Создание вектора вывода поискового запроса
+        std::vector<Document> matched_documents;
+        for (const auto [document_id, relevance] : document_to_relevance.BuildOrdinaryMap()) {
             matched_documents.push_back({
                 document_id,
                 relevance,

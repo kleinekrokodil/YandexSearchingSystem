@@ -48,4 +48,10 @@ public:
         }
         return result;
     }
+
+    void erase(const Key& key) {
+        size_t pos = static_cast<uint64_t>(key) % buckets_.size();
+        std::lock_guard<std::mutex> guard(buckets_[pos].mutex);
+        buckets_[pos].map.erase(key);
+    }
 };
