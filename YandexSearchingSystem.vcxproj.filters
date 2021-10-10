@@ -74,5 +74,8 @@
     <ClInclude Include="process_queries.h">
       <Filter>Файлы заголовков</Filter>
     </ClInclude>
+    <ClInclude Include="concurrent_map.h">
+      <Filter>Файлы заголовков</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>
