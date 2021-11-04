@@ -11,7 +11,7 @@ size_t SearchServer::GetDocumentCount() const {
 }
 
 //Добавление нового документа
-void SearchServer::AddDocument(int document_id, const string& document, DocumentStatus status, const vector<int>& ratings) {
+void SearchServer::AddDocument(int document_id, const string_view document, DocumentStatus status, const vector<int>& ratings) {
     if (!IsValidWord(document)) {
         throw invalid_argument("Document contains special symbols"s);
     }
@@ -19,11 +19,15 @@ void SearchServer::AddDocument(int document_id, const string& document, Document
         throw invalid_argument("Document_id is negative or already exist"s);
     }
 
-    const vector<string> words = SplitIntoWordsNoStop(document);
+    const auto words = SplitIntoWordsNoStop(document);
     const double inv_word_count = 1.0 / words.size();
-    for (const string& word : words) {
-        word_to_document_freqs_[word][document_id] += inv_word_count;
-        document_to_word_freqs_[document_id][word] += inv_word_count;
+
+    for (const auto& word : words) {
+        auto [a, b] = words_.emplace(word);
+        string_view word_view = *a;
+        word_to_document_freqs_[word_view][document_id] += inv_word_count;
+        document_to_word_freqs_[document_id][word_view] += inv_word_count;
+
     }
     documents_.emplace(document_id,
         DocumentData{
@@ -34,49 +38,61 @@ void SearchServer::AddDocument(int document_id, const string& document, Document
 }
 
 //Метод возврата списка совпавших слов запроса
-tuple<vector<string>, DocumentStatus> SearchServer::MatchDocument(const string& raw_query, int document_id) const {
+tuple<vector<string_view>, DocumentStatus> SearchServer::MatchDocument(const string_view raw_query, int document_id) const {
 
     Query query = ParseQuery(raw_query);
-    set<string> BingoWords = {}; //Чтобы не сортировать и не проверять на совпадение
+    set<string_view> BingoWords = {}; //Чтобы не сортировать и не проверять на совпадение
 
     //Обработка вектора плюс-слов
-    for (const string& word : query.plus_words) {
-        if (word_to_document_freqs_.count(word) == 0) {
-            continue;
-        }
-        for (auto [document_, TF] : word_to_document_freqs_.at(word)) {
-            //проверка совпадения по документу и запись слова в вектор
-            if (document_ == document_id) {
-                BingoWords.insert(word);
-            }
+    for (const auto word : query.plus_words) {
+        if (word_to_document_freqs_.count(word) != 0 && word_to_document_freqs_.at(word).count(document_id)) {
+            BingoWords.insert(word);
         }
     }
 
     //Исключение документов с минус-словами
-    for (const string& word : query.minus_words) {
-        if (word_to_document_freqs_.count(word) == 0) {
-            continue;
-        }
-        for (auto [document_, TF] : word_to_document_freqs_.at(word)) {
-            //если совпадение по документу - очистка вектора
-            if (document_ == document_id) {
-                BingoWords.clear();
-            }
+    for (const auto word : query.minus_words) {
+        if (word_to_document_freqs_.count(word) != 0 && word_to_document_freqs_.at(word).count(document_id)) {
+            BingoWords.clear();
         }
     }
-    vector<string> v(BingoWords.begin(), BingoWords.end());
+    vector<string_view> v(BingoWords.begin(), BingoWords.end());
     return tuple(v, documents_.at(document_id).status);
 }
 
+
+std::tuple<vector<string_view>, DocumentStatus> SearchServer::MatchDocument(const std::execution::sequenced_policy&, const string_view raw_query, int document_id) const {
+    return SearchServer::MatchDocument(raw_query, document_id);
+}
+std::tuple<vector<string_view>, DocumentStatus> SearchServer::MatchDocument(const std::execution::parallel_policy&, const string_view raw_query, int document_id) const {
+    Query query = ParseQuery(raw_query);
+    set<string_view> BingoWords = {}; //Чтобы не сортировать и не проверять на совпадение
+
+    //Обработка вектора плюс-слов
+    for (const auto word : query.plus_words) {
+        if (word_to_document_freqs_.count(word) != 0 && word_to_document_freqs_.at(word).count(document_id)) {
+            BingoWords.insert(word);
+        }
+    }
+
+    //Исключение документов с минус-словами
+    for (const auto word : query.minus_words) {
+        if (word_to_document_freqs_.count(word) != 0 && word_to_document_freqs_.at(word).count(document_id)) {
+            BingoWords.clear();
+        }
+    }
+    vector<string_view> v(BingoWords.begin(), BingoWords.end());
+    return tuple(v, documents_.at(document_id).status);
+}
 //Проверка входящего слова на принадлежность к стоп-словам
-bool SearchServer::IsStopWord(const string& word) const {
+bool SearchServer::IsStopWord(const string_view word) const {
     return stop_words_.count(word) > 0;
 }
 
 //Разбивка строки запроса на вектор слов, исключая стоп-слова
-vector<string> SearchServer::SplitIntoWordsNoStop(const string& text) const {
-    vector<string> words;
-    for (const string& word : SplitIntoWords(text)) {
+vector<string_view> SearchServer::SplitIntoWordsNoStop(const string_view text) const {
+    vector<string_view> words;
+    for (const auto word : SplitIntoWords(text)) {
         if (!IsStopWord(word)) {
             words.push_back(word);
         }
@@ -97,11 +113,11 @@ int SearchServer::ComputeAverageRating(const vector<int>& ratings) {
 }
 
 //Отсечение "-" у минус-слов
-SearchServer::QueryWord SearchServer::ParseQueryWord(string text) const {
+SearchServer::QueryWord SearchServer::ParseQueryWord(string_view text) const {
     bool is_minus = false;
     if (text[0] == '-') {
         is_minus = true;
-        text = text.substr(1);
+        text.remove_prefix(1);
     }
     return {
         text,
@@ -111,7 +127,7 @@ SearchServer::QueryWord SearchServer::ParseQueryWord(string text) const {
 }
 
 //Создание списков плюс- и минус-слов
-SearchServer::Query SearchServer::ParseQuery(const string& raw_query) const {
+SearchServer::Query SearchServer::ParseQuery(const string_view raw_query) const {
     if (!IsValidWord(raw_query)) {
         throw invalid_argument("Query contains special symbols"s);
     }
@@ -125,7 +141,7 @@ SearchServer::Query SearchServer::ParseQuery(const string& raw_query) const {
         throw invalid_argument("No word after '-' symbol"s);
     }
     Query query;
-    for (const string& word : SplitIntoWords(raw_query)) {
+    for (const auto word : SplitIntoWords(raw_query)) {
         const QueryWord query_word = ParseQueryWord(word);
         if (!query_word.is_stop) {
             if (query_word.is_minus) {
@@ -140,12 +156,12 @@ SearchServer::Query SearchServer::ParseQuery(const string& raw_query) const {
 }
 
 //Вычисление IDF слова
-double SearchServer::ComputeWordInverseDocumentFreq(const string& word) const {
+double SearchServer::ComputeWordInverseDocumentFreq(const string_view word) const {
     return log(documents_.size() * 1.0 / word_to_document_freqs_.at(word).size());
 }
 
 
-bool SearchServer::IsValidWord(const string& word) {
+bool SearchServer::IsValidWord(const string_view word) {
     // A valid word must not contain special characters
     // Возвращает true, если в слове отсутствуют спецсимволы
     return none_of(word.begin(), word.end(), [](char c) {
@@ -160,13 +176,13 @@ void PrintDocument(const Document& document) {
         << "rating = "s << document.rating << " }"s << endl;
 }
 
-void PrintMatchDocumentResult(int document_id, const vector<string>& words, DocumentStatus status) {
+void PrintMatchDocumentResult(int document_id, const vector<string_view> words, DocumentStatus status) {
     cout << "{ "s
         << "document_id = "s << document_id << ", "s
         << "status = "s << static_cast<int>(status) << ", "s
         << "words ="s;
-    for (const string& word : words) {
-        cout << ' ' << word;
+    for (const auto word : words) {
+        cout << ' ' << string(word.data(), word.length());
     }
     cout << "}"s << endl;
 }
@@ -193,7 +209,7 @@ void FindTopDocuments(const SearchServer& search_server, const string& raw_query
     }
 }
 
-void MatchDocuments(const SearchServer& search_server, const string& query) {
+void MatchDocuments(const SearchServer& search_server, const string_view query) {
     try {
         cout << "Matching documents for the query: "s << query << endl;
         for (const int document_id : search_server) {
@@ -207,8 +223,10 @@ void MatchDocuments(const SearchServer& search_server, const string& query) {
 }
 
 //Метод получения частот слов по id документа
-const map<string, double>& SearchServer::GetWordFrequencies(int document_id) const {
-    static const map<string, double> empty_words = {};
+
+const map<string_view, double>& SearchServer::GetWordFrequencies(int document_id) const {
+    static const map<string_view, double> empty_words = {};
+
     if (document_to_word_freqs_.count(document_id)) {
         return document_to_word_freqs_.at(document_id);
     }//logN
@@ -226,4 +244,20 @@ void SearchServer::RemoveDocument(int document_id) {
     document_ids_.erase(document_id);//logN + 1
     documents_.erase(document_id);//logN + 1
 }//WlogN
+
+
+void SearchServer::RemoveDocument(const execution::sequenced_policy&, int document_id) {
+    for_each(execution::seq, document_to_word_freqs_.at(document_id).begin(), document_to_word_freqs_.at(document_id).end(),
+        [&, document_id](auto& el) { word_to_document_freqs_.at(el.first).erase(document_id); });
+    document_to_word_freqs_.erase(document_id);//logN + 1 = logN
+    document_ids_.erase(document_id);//logN + 1
+    documents_.erase(document_id);//logN + 1
+}
+void SearchServer::RemoveDocument(const execution::parallel_policy&, int document_id) {
+    for_each(execution::par, document_to_word_freqs_.at(document_id).begin(), document_to_word_freqs_.at(document_id).end(),
+        [&, document_id](auto& el) { word_to_document_freqs_.at(el.first).erase(document_id); });
+    document_to_word_freqs_.erase(document_id);//logN + 1 = logN
+    document_ids_.erase(document_id);//logN + 1
+    documents_.erase(document_id);//logN + 1
+}
 

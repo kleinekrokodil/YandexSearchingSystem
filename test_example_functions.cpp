@@ -75,11 +75,11 @@ void TestMatchingDocument() {
     server.AddDocument(doc_id, doc, DocumentStatus::ACTUAL, ratings);
     //При поиске без стоп-слова должен быть выведен кортеж из вектора совпавших слов и статуса документа
     auto found_docs = server.MatchDocument("cat"s, doc_id);
-    ASSERT_HINT(get<vector<string>>(found_docs).at(0) == "cat"s, "Something wrong with matching"s);
+    ASSERT_HINT(get<vector<string_view>>(found_docs).at(0) == "cat"s, "Something wrong with matching"s);
     ASSERT_HINT(get<DocumentStatus>(found_docs) == DocumentStatus::ACTUAL, "Something wrong with matching"s);
     //При поиске с минус-словом - пустой кортеж
     found_docs = server.MatchDocument("cat -in"s, doc_id);
-    ASSERT_HINT(get<vector<string>>(found_docs).size() == 0, "Matching doesn't process request with minus-words"s);
+    ASSERT_HINT(get<vector<string_view>>(found_docs).size() == 0, "Matching doesn't process request with minus-words"s);
 }
 void TestSortingByRelevance() {
     SearchServer server;

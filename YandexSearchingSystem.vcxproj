@@ -21,6 +21,7 @@
   <ItemGroup>
     <ClCompile Include="document.cpp" />
     <ClCompile Include="main.cpp" />
+    <ClCompile Include="process_queries.cpp" />
     <ClCompile Include="read_input_functions.cpp" />
     <ClCompile Include="remove_duplicates.cpp" />
     <ClCompile Include="request_queue.cpp" />
@@ -29,9 +30,11 @@
     <ClCompile Include="test_example_functions.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="concurrent_map.h" />
     <ClInclude Include="document.h" />
     <ClInclude Include="log_duration.h" />
     <ClInclude Include="paginator.h" />
+    <ClInclude Include="process_queries.h" />
     <ClInclude Include="read_input_functions.h" />
     <ClInclude Include="remove_duplicates.h" />
     <ClInclude Include="request_queue.h" />
@@ -65,6 +68,7 @@
     <UseDebugLibraries>true</UseDebugLibraries>
     <PlatformToolset>v142</PlatformToolset>
     <CharacterSet>Unicode</CharacterSet>
+    <EnableASAN>false</EnableASAN>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
     <ConfigurationType>Application</ConfigurationType>
@@ -138,6 +142,7 @@
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
+      <LanguageStandard>stdcpp17</LanguageStandard>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -152,6 +157,8 @@
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
+      <LanguageStandard>stdcpp17</LanguageStandard>
+      <LanguageStandard_C>stdc17</LanguageStandard_C>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
